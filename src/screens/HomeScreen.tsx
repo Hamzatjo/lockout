@@ -1,6 +1,4 @@
-// LOCKOUT Home Screen
-
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
     View,
     Text,
@@ -9,8 +7,11 @@ import {
     FlatList,
     Image,
     RefreshControl,
+    ViewToken,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useVideoPlayer, VideoView } from 'expo-video';
+import { useEvent } from 'expo';
 import { colors, typography, spacing, borderRadius, shadows } from '../theme';
 import { supabase, Database } from '../lib/supabase';
 import MediaViewer from '../components/MediaViewer';
@@ -19,6 +20,39 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 type Workout = Database['public']['Tables']['workouts']['Row'] & {
     profiles: { username: string; avatar_url: string | null } | null;
 };
+
+const VIEWABILITY_CONFIG = {
+    itemVisiblePercentThreshold: 50,
+    minimumViewTime: 300,
+};
+
+function VideoThumbnail({ uri, isVisible }: { uri: string; isVisible: boolean }) {
+    const player = useVideoPlayer(uri, player => {
+        player.loop = true;
+        player.muted = true;
+    });
+
+    const { isPlaying } = useEvent(player, 'playingChange', {
+        isPlaying: player.playing,
+    });
+
+    useEffect(() => {
+        if (isVisible && !isPlaying) {
+            player.play();
+        } else if (!isVisible && isPlaying) {
+            player.pause();
+        }
+    }, [isVisible, isPlaying, player]);
+
+    return (
+        <VideoView
+            player={player}
+            style={styles.cardImage}
+            contentFit="cover"
+            nativeControls={false}
+        />
+    );
+}
 
 type Props = {
     navigation: NativeStackNavigationProp<any>;
@@ -34,6 +68,7 @@ export default function HomeScreen({ navigation }: Props) {
         caption?: string;
         username?: string;
     } | null>(null);
+    const [visibleVideoIds, setVisibleVideoIds] = useState<Set<string>>(new Set());
 
     const fetchFeed = async () => {
         // Get user's squad
@@ -93,10 +128,28 @@ export default function HomeScreen({ navigation }: Props) {
         }
     };
 
+    const onViewableItemsChanged = useCallback(
+        ({ changed }: { changed: ViewToken[] }) => {
+            setVisibleVideoIds(prevSet => {
+                const newSet = new Set(prevSet);
+                changed.forEach(item => {
+                    if (item.isViewable) {
+                        newSet.add(item.key);
+                    } else {
+                        newSet.delete(item.key);
+                    }
+                });
+                return newSet;
+            });
+        },
+        []
+    );
+
     const renderWorkoutCard = ({ item }: { item: Workout }) => {
         const isCheckIn = item.verification_level === 'check_in';
         const isTribunal = item.verification_level === 'tribunal';
         const isVideo = isVideoMedia(item);
+        const isVisible = visibleVideoIds.has(item.id);
 
         return (
             <TouchableOpacity
@@ -133,17 +186,7 @@ export default function HomeScreen({ navigation }: Props) {
                 {item.thumbnail_url && (
                     <View style={styles.mediaContainer}>
                         {isVideo ? (
-                            <>
-                                <Image
-                                    source={{ uri: item.thumbnail_url }}
-                                    style={styles.cardImage}
-                                    blurRadius={2}
-                                />
-                                <View style={styles.playOverlay}>
-                                    <Text style={styles.playIcon}>▶️</Text>
-                                    <Text style={styles.tapToPlay}>Tap to play</Text>
-                                </View>
-                            </>
+                            <VideoThumbnail uri={item.media_url || item.thumbnail_url} isVisible={isVisible} />
                         ) : (
                             <Image source={{ uri: item.thumbnail_url }} style={styles.cardImage} />
                         )}
@@ -207,6 +250,8 @@ export default function HomeScreen({ navigation }: Props) {
                         tintColor={colors.primary}
                     />
                 }
+                onViewableItemsChanged={onViewableItemsChanged}
+                viewabilityConfig={VIEWABILITY_CONFIG}
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
                         <Text style={styles.emptyEmoji}>🏋️</Text>
@@ -372,24 +417,6 @@ const styles = StyleSheet.create({
     },
     mediaContainer: {
         position: 'relative',
-    },
-    playOverlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: 'rgba(0,0,0,0.4)',
-    },
-    playIcon: {
-        fontSize: 48,
-    },
-    tapToPlay: {
-        ...typography.labelSmall,
-        color: colors.textPrimary,
-        marginTop: spacing.xs,
     },
     cardImage: {
         width: '100%',

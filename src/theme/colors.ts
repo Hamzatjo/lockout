@@ -28,6 +28,10 @@ export const colors = {
   // Valid - Green (same as primary)
   valid: '#00FF87',
   
+  // Success - Green variants
+  success: '#00FF87',
+  successLight: 'rgba(0, 255, 135, 0.2)',
+  
   // Warning - Orange
   warning: '#FF9500',
   

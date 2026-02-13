@@ -1,12 +1,9 @@
-// LOCKOUT Main App Navigator
-
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text, View, StyleSheet } from 'react-native';
 import { colors, typography } from '../theme';
 
-// Screens
 import HomeScreen from '../screens/HomeScreen';
 import FitCheckScreen from '../screens/FitCheckScreen';
 import TribunalUploadScreen from '../screens/TribunalUploadScreen';
@@ -15,7 +12,16 @@ import SquadScreen from '../screens/SquadScreen';
 import CreateSquadScreen from '../screens/CreateSquadScreen';
 import JoinSquadScreen from '../screens/JoinSquadScreen';
 import LeaderboardScreen from '../screens/LeaderboardScreen';
+import PRLeaderboardScreen from '../screens/PRLeaderboardScreen';
+import BodyStatsScreen from '../screens/BodyStatsScreen';
+import StatsOverviewScreen from '../screens/StatsOverviewScreen';
+import ScheduleScreen from '../screens/ScheduleScreen';
+import CreateEventScreen from '../screens/CreateEventScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import WorkoutsScreen from '../screens/WorkoutsScreen';
+import EditWorkoutScreen from '../screens/EditWorkoutScreen';
+import ActiveWorkoutScreen from '../screens/ActiveWorkoutScreen';
+import { Exercise } from '../data/exercises';
 
 export type MainStackParamList = {
     MainTabs: undefined;
@@ -25,10 +31,18 @@ export type MainStackParamList = {
     CreateSquad: undefined;
     JoinSquad: undefined;
     Profile: undefined;
+    PRLeaderboard: { exercise: Exercise };
+    BodyStats: undefined;
+    StatsOverview: undefined;
+    CreateEvent: { date: Date };
+    EditWorkout: { workout?: any } | undefined;
+    ActiveWorkout: { workout?: any; scheduleEventId?: string } | undefined;
 };
 
 export type TabParamList = {
     Home: undefined;
+    Schedule: undefined;
+    Workouts: undefined;
     Tribunal: undefined;
     Leaderboard: undefined;
     Squad: undefined;
@@ -41,14 +55,17 @@ const Tab = createBottomTabNavigator<TabParamList>();
 function TabIcon({ name, focused }: { name: string; focused: boolean }) {
     const icons: Record<string, string> = {
         Home: '🏠',
+        Schedule: '📅',
+        Workouts: '🏋️',
         Tribunal: '⚖️',
         Leaderboard: '🏆',
         Squad: '👥',
     };
 
-    // Use shorter labels for display
     const labels: Record<string, string> = {
         Home: 'Home',
+        Schedule: 'Schedule',
+        Workouts: 'Workouts',
         Tribunal: 'Tribunal',
         Leaderboard: 'Rank',
         Squad: 'Squad',
@@ -80,6 +97,8 @@ function MainTabs() {
             })}
         >
             <Tab.Screen name="Home" component={HomeScreen} />
+            <Tab.Screen name="Schedule" component={ScheduleScreen} />
+            <Tab.Screen name="Workouts" component={WorkoutsScreen} />
             <Tab.Screen name="Tribunal" component={TribunalVoteScreen} />
             <Tab.Screen name="Leaderboard" component={LeaderboardScreen} />
             <Tab.Screen name="Squad" component={SquadScreen} />
@@ -127,6 +146,36 @@ export default function MainNavigator() {
                 name="Profile"
                 component={ProfileScreen}
                 options={{ animation: 'slide_from_right' }}
+            />
+            <Stack.Screen
+                name="PRLeaderboard"
+                component={PRLeaderboardScreen}
+                options={{ animation: 'slide_from_right' }}
+            />
+            <Stack.Screen
+                name="BodyStats"
+                component={BodyStatsScreen}
+                options={{ animation: 'slide_from_bottom' }}
+            />
+            <Stack.Screen
+                name="StatsOverview"
+                component={StatsOverviewScreen}
+                options={{ animation: 'slide_from_bottom' }}
+            />
+            <Stack.Screen
+                name="CreateEvent"
+                component={CreateEventScreen}
+                options={{ animation: 'slide_from_bottom' }}
+            />
+            <Stack.Screen
+                name="EditWorkout"
+                component={EditWorkoutScreen}
+                options={{ animation: 'slide_from_bottom' }}
+            />
+            <Stack.Screen
+                name="ActiveWorkout"
+                component={ActiveWorkoutScreen}
+                options={{ animation: 'slide_from_bottom', gestureEnabled: false }}
             />
         </Stack.Navigator>
     );

@@ -106,6 +106,10 @@ export type Database = {
                     caption: string | null;
                     expires_at: string;
                     quest_id: string | null;
+                    exercise_type: string | null;
+                    weight_kg: number | null;
+                    reps: number | null;
+                    is_verified: boolean;
                     created_at: string;
                 };
                 Insert: Omit<Database['public']['Tables']['workouts']['Row'], 'id' | 'created_at' | 'points'>;
@@ -134,6 +138,89 @@ export type Database = {
                 };
                 Insert: Omit<Database['public']['Tables']['quests']['Row'], 'id' | 'created_at'>;
                 Update: Partial<Database['public']['Tables']['quests']['Insert']>;
+            };
+            schedule_events: {
+                Row: {
+                    id: string;
+                    squad_id: string;
+                    creator_id: string;
+                    title: string;
+                    description: string | null;
+                    gym_location: string | null;
+                    event_date: string;
+                    start_time: string;
+                    end_time: string | null;
+                    max_participants: number;
+                    created_at: string;
+                };
+                Insert: Omit<Database['public']['Tables']['schedule_events']['Row'], 'id' | 'created_at'>;
+                Update: Partial<Database['public']['Tables']['schedule_events']['Insert']>;
+            };
+            event_participants: {
+                Row: {
+                    id: string;
+                    event_id: string;
+                    user_id: string;
+                    status: 'joined' | 'pending' | 'declined';
+                    joined_at: string;
+                };
+                Insert: Omit<Database['public']['Tables']['event_participants']['Row'], 'id' | 'joined_at'>;
+                Update: Partial<Database['public']['Tables']['event_participants']['Insert']>;
+            };
+            custom_workouts: {
+                Row: {
+                    id: string;
+                    user_id: string;
+                    name: string;
+                    description: string | null;
+                    created_at: string;
+                    updated_at: string;
+                };
+                Insert: Omit<Database['public']['Tables']['custom_workouts']['Row'], 'id' | 'created_at' | 'updated_at'>;
+                Update: Partial<Database['public']['Tables']['custom_workouts']['Insert']>;
+            };
+            workout_exercises: {
+                Row: {
+                    id: string;
+                    workout_id: string;
+                    exercise_type: string;
+                    sets: number;
+                    reps_min: number;
+                    reps_max: number;
+                    rest_seconds: number;
+                    notes: string | null;
+                    order_index: number;
+                };
+                Insert: Omit<Database['public']['Tables']['workout_exercises']['Row'], 'id'>;
+                Update: Partial<Database['public']['Tables']['workout_exercises']['Insert']>;
+            };
+            workout_logs: {
+                Row: {
+                    id: string;
+                    user_id: string;
+                    workout_id: string | null;
+                    schedule_event_id: string | null;
+                    logged_at: string;
+                    duration_minutes: number | null;
+                    notes: string | null;
+                    completed: boolean;
+                };
+                Insert: Omit<Database['public']['Tables']['workout_logs']['Row'], 'id' | 'logged_at'>;
+                Update: Partial<Database['public']['Tables']['workout_logs']['Insert']>;
+            };
+            exercise_logs: {
+                Row: {
+                    id: string;
+                    workout_log_id: string;
+                    exercise_type: string;
+                    set_number: number;
+                    weight_kg: number | null;
+                    reps: number | null;
+                    duration_seconds: number | null;
+                    notes: string | null;
+                };
+                Insert: Omit<Database['public']['Tables']['exercise_logs']['Row'], 'id'>;
+                Update: Partial<Database['public']['Tables']['exercise_logs']['Insert']>;
             };
         };
     };

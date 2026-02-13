@@ -12,54 +12,49 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, typography, spacing, borderRadius } from '../theme';
 import { supabase } from '../lib/supabase';
+import { getExerciseName, MUSCLE_GROUP_ICONS, Exercise } from '../data/exercises';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-type LeaderboardEntry = {
+type PRRecord = {
+    id: string;
     user_id: string;
     username: string;
     avatar_url: string | null;
-    total_points: number;
-    check_in_days: number;
-    tribunal_wins: number;
-    pr_claims: number;
+    weight_kg: number;
+    reps: number;
+    estimated_1rm: number;
+    is_verified: boolean;
+    created_at: string;
 };
-
-type TimeFilter = 'week' | 'season' | 'all';
 
 type Props = {
     navigation: NativeStackNavigationProp<any>;
+    route: {
+        params: {
+            exercise: Exercise;
+        };
+    };
 };
 
-export default function LeaderboardScreen({ navigation }: Props) {
-    const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+export function calculate1RM(weightKg: number, reps: number): number {
+    if (reps <= 0 || reps > 12) return 0;
+    return Math.round(weightKg * (36 / (37 - reps)));
+}
+
+export default function PRLeaderboardScreen({ navigation, route }: Props) {
+    const { exercise } = route.params;
+    const [records, setRecords] = useState<PRRecord[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [filter, setFilter] = useState<TimeFilter>('week');
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [squadName, setSquadName] = useState<string | null>(null);
+    const [verifiedOnly, setVerifiedOnly] = useState(false);
 
     useEffect(() => {
-        fetchLeaderboard();
-    }, [filter]);
+        fetchPRs();
+    }, [exercise.id, verifiedOnly]);
 
-    const getDateRange = () => {
-        const now = new Date();
-        switch (filter) {
-            case 'week':
-                const weekAgo = new Date(now);
-                weekAgo.setDate(weekAgo.getDate() - 7);
-                weekAgo.setHours(0, 0, 0, 0);
-                return { start: weekAgo.toISOString(), end: now.toISOString() };
-            case 'season':
-                const seasonStart = new Date(now.getFullYear(), now.getMonth(), 1);
-                return { start: seasonStart.toISOString(), end: now.toISOString() };
-            case 'all':
-            default:
-                return { start: '2020-01-01T00:00:00Z', end: now.toISOString() };
-        }
-    };
-
-    const fetchLeaderboard = async () => {
+    const fetchPRs = async () => {
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
@@ -78,60 +73,52 @@ export default function LeaderboardScreen({ navigation }: Props) {
 
             setSquadName((membership.squads as any)?.name || null);
 
-            const { start, end } = getDateRange();
-
-            const { data: workouts } = await supabase
+            let query = supabase
                 .from('workouts')
-                .select('user_id, points, verification_level, created_at, profiles(username, avatar_url)')
+                .select('id, user_id, weight_kg, reps, is_verified, created_at, profiles(username, avatar_url)')
                 .eq('squad_id', membership.squad_id)
-                .gte('created_at', start)
-                .lte('created_at', end)
-                .gt('points', 0);
+                .eq('exercise_type', exercise.id)
+                .not('weight_kg', 'is', null)
+                .not('reps', 'is', null)
+                .gt('weight_kg', 0)
+                .gt('reps', 0);
 
-            if (!workouts) {
-                setLoading(false);
-                return;
+            if (verifiedOnly) {
+                query = query.eq('is_verified', true);
             }
 
-            const userStats: Record<string, LeaderboardEntry & { checkInDates: Set<string> }> = {};
+            const { data } = await query;
 
-            workouts.forEach((workout: any) => {
-                const userId = workout.user_id;
-                if (!userStats[userId]) {
-                    userStats[userId] = {
-                        user_id: userId,
-                        username: workout.profiles?.username || 'Unknown',
-                        avatar_url: workout.profiles?.avatar_url || null,
-                        total_points: 0,
-                        check_in_days: 0,
-                        tribunal_wins: 0,
-                        pr_claims: 0,
-                        checkInDates: new Set(),
-                    };
-                }
+            if (data) {
+                const processed: PRRecord[] = data.map((w: any) => ({
+                    id: w.id,
+                    user_id: w.user_id,
+                    username: w.profiles?.username || 'Unknown',
+                    avatar_url: w.profiles?.avatar_url || null,
+                    weight_kg: parseFloat(w.weight_kg) || 0,
+                    reps: w.reps || 0,
+                    estimated_1rm: calculate1RM(parseFloat(w.weight_kg) || 0, w.reps || 0),
+                    is_verified: w.is_verified || false,
+                    created_at: w.created_at,
+                }));
 
-                userStats[userId].total_points += workout.points || 0;
-
-                if (workout.verification_level === 'check_in') {
-                    const dateKey = new Date(workout.created_at).toDateString();
-                    if (!userStats[userId].checkInDates.has(dateKey)) {
-                        userStats[userId].checkInDates.add(dateKey);
-                        userStats[userId].check_in_days += 1;
+                const userBestPRs: Record<string, PRRecord> = {};
+                processed.forEach(pr => {
+                    if (pr.estimated_1rm > 0) {
+                        const existing = userBestPRs[pr.user_id];
+                        if (!existing || pr.estimated_1rm > existing.estimated_1rm) {
+                            userBestPRs[pr.user_id] = pr;
+                        }
                     }
-                }
+                });
 
-                if (workout.verification_level === 'tribunal') {
-                    userStats[userId].tribunal_wins += 1;
-                }
-            });
-
-            const sorted = Object.values(userStats)
-                .map(({ checkInDates, ...entry }) => entry)
-                .sort((a, b) => b.total_points - a.total_points);
-
-            setEntries(sorted);
+                const sorted = Object.values(userBestPRs).sort(
+                    (a, b) => b.estimated_1rm - a.estimated_1rm
+                );
+                setRecords(sorted);
+            }
         } catch (error) {
-            console.error('Error fetching leaderboard:', error);
+            console.error('Error fetching PRs:', error);
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -140,10 +127,10 @@ export default function LeaderboardScreen({ navigation }: Props) {
 
     const onRefresh = () => {
         setRefreshing(true);
-        fetchLeaderboard();
+        fetchPRs();
     };
 
-    const renderEntry = ({ item, index }: { item: LeaderboardEntry; index: number }) => {
+    const renderRecord = ({ item, index }: { item: PRRecord; index: number }) => {
         const rank = index + 1;
         const isCurrentUser = item.user_id === currentUserId;
         const isTop3 = rank <= 3;
@@ -152,7 +139,7 @@ export default function LeaderboardScreen({ navigation }: Props) {
 
         return (
             <View style={[
-                styles.entryCard,
+                styles.recordCard,
                 isCurrentUser && styles.currentUserCard,
                 isTop3 && styles.top3Card,
             ]}>
@@ -174,21 +161,27 @@ export default function LeaderboardScreen({ navigation }: Props) {
                     )}
                 </View>
 
-                <View style={styles.entryInfo}>
-                    <Text style={[styles.entryName, isCurrentUser && styles.currentUserName]}>
+                <View style={styles.recordInfo}>
+                    <Text style={[styles.recordName, isCurrentUser && styles.currentUserName]}>
                         {item.username} {isCurrentUser && '(You)'}
                     </Text>
-                    <View style={styles.statsRow}>
-                        <Text style={styles.statItem}>📅 {item.check_in_days} days</Text>
-                        <Text style={styles.statItem}>⚖️ {item.tribunal_wins}</Text>
+                    <View style={styles.liftDetails}>
+                        <Text style={styles.liftWeight}>
+                            {item.weight_kg} kg × {item.reps}
+                        </Text>
                     </View>
                 </View>
 
-                <View style={styles.pointsContainer}>
-                    <Text style={[styles.points, isTop3 && styles.top3Points]}>
-                        {item.total_points}
+                <View style={styles.prContainer}>
+                    <Text style={[styles.prValue, isTop3 && styles.top3PrValue]}>
+                        {item.estimated_1rm}
                     </Text>
-                    <Text style={styles.pointsLabel}>pts</Text>
+                    <Text style={styles.prLabel}>kg 1RM</Text>
+                    {item.is_verified && (
+                        <View style={styles.verifiedBadge}>
+                            <Text style={styles.verifiedText}>✓</Text>
+                        </View>
+                    )}
                 </View>
             </View>
         );
@@ -205,55 +198,36 @@ export default function LeaderboardScreen({ navigation }: Props) {
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
-                <View style={styles.headerRow}>
-                    <Text style={styles.headerTitle}>LEADERBOARD</Text>
-                    <TouchableOpacity 
-                        style={styles.bodyButton}
-                        onPress={() => navigation.navigate('BodyStats')}
-                    >
-                        <Text style={styles.bodyButtonText}>Body →</Text>
-                    </TouchableOpacity>
-                </View>
+                <TouchableOpacity onPress={() => navigation.goBack()}>
+                    <Text style={styles.backButton}>← Back</Text>
+                </TouchableOpacity>
+                <Text style={styles.headerTitle}>PR LEADERBOARD</Text>
+                <View style={styles.placeholder} />
+            </View>
+
+            <View style={styles.exerciseHeader}>
+                <Text style={styles.exerciseIcon}>
+                    {MUSCLE_GROUP_ICONS[exercise.muscleGroup]}
+                </Text>
+                <Text style={styles.exerciseName}>{exercise.name}</Text>
                 {squadName && <Text style={styles.squadName}>{squadName}</Text>}
             </View>
 
-            <View style={styles.filterContainer}>
+            <View style={styles.filterRow}>
                 <TouchableOpacity
-                    style={[styles.filterButton, filter === 'week' && styles.filterActive]}
-                    onPress={() => setFilter('week')}
+                    style={[styles.filterButton, verifiedOnly && styles.filterActive]}
+                    onPress={() => setVerifiedOnly(!verifiedOnly)}
                 >
-                    <Text style={[styles.filterText, filter === 'week' && styles.filterTextActive]}>
-                        This Week
+                    <Text style={[styles.filterText, verifiedOnly && styles.filterTextActive]}>
+                        {verifiedOnly ? '✓ Verified Only' : 'All PRs'}
                     </Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                    style={[styles.filterButton, filter === 'season' && styles.filterActive]}
-                    onPress={() => setFilter('season')}
-                >
-                    <Text style={[styles.filterText, filter === 'season' && styles.filterTextActive]}>
-                        This Season
-                    </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={[styles.filterButton, filter === 'all' && styles.filterActive]}
-                    onPress={() => setFilter('all')}
-                >
-                    <Text style={[styles.filterText, filter === 'all' && styles.filterTextActive]}>
-                        All Time
-                    </Text>
-                </TouchableOpacity>
-            </View>
-
-            <View style={styles.scoringInfo}>
-                <Text style={styles.scoringText}>
-                    📸 Check-in: 1 pt/day • ⚖️ Tribunal: 10-15 pts • 🏆 Verified PR: Bonus
-                </Text>
             </View>
 
             <FlatList
-                data={entries}
-                renderItem={renderEntry}
-                keyExtractor={(item) => item.user_id}
+                data={records}
+                renderItem={renderRecord}
+                keyExtractor={(item) => item.id}
                 contentContainerStyle={styles.list}
                 refreshControl={
                     <RefreshControl
@@ -264,10 +238,10 @@ export default function LeaderboardScreen({ navigation }: Props) {
                 }
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
-                        <Text style={styles.emptyEmoji}>📊</Text>
-                        <Text style={styles.emptyTitle}>No activity yet</Text>
+                        <Text style={styles.emptyEmoji}>🏋️</Text>
+                        <Text style={styles.emptyTitle}>No PRs yet</Text>
                         <Text style={styles.emptyText}>
-                            Complete workouts to climb the leaderboard!
+                            Claim a PR in the Tribunal to get on the board!
                         </Text>
                     </View>
                 }
@@ -288,44 +262,52 @@ const styles = StyleSheet.create({
         backgroundColor: colors.background,
     },
     header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
         paddingHorizontal: spacing.lg,
         paddingVertical: spacing.md,
         borderBottomWidth: 1,
         borderBottomColor: colors.border,
     },
-    headerRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
+    backButton: {
+        ...typography.bodyLarge,
+        color: colors.primary,
     },
     headerTitle: {
         ...typography.labelLarge,
         color: colors.primary,
     },
-    bodyButton: {
-        backgroundColor: colors.surface,
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.xs,
-        borderRadius: borderRadius.md,
+    placeholder: {
+        width: 50,
     },
-    bodyButtonText: {
-        ...typography.labelSmall,
-        color: colors.primary,
+    exerciseHeader: {
+        alignItems: 'center',
+        paddingVertical: spacing.lg,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    exerciseIcon: {
+        fontSize: 40,
+        marginBottom: spacing.sm,
+    },
+    exerciseName: {
+        ...typography.headlineMedium,
+        color: colors.textPrimary,
     },
     squadName: {
         ...typography.labelSmall,
         color: colors.textMuted,
         marginTop: spacing.xs,
     },
-    filterContainer: {
+    filterRow: {
         flexDirection: 'row',
         padding: spacing.md,
-        gap: spacing.sm,
+        justifyContent: 'center',
     },
     filterButton: {
-        flex: 1,
         paddingVertical: spacing.sm,
-        paddingHorizontal: spacing.md,
+        paddingHorizontal: spacing.lg,
         borderRadius: borderRadius.full,
         backgroundColor: colors.surface,
         alignItems: 'center',
@@ -341,19 +323,10 @@ const styles = StyleSheet.create({
         color: colors.background,
         fontWeight: '700',
     },
-    scoringInfo: {
-        paddingHorizontal: spacing.md,
-        paddingBottom: spacing.sm,
-    },
-    scoringText: {
-        ...typography.labelSmall,
-        color: colors.textMuted,
-        textAlign: 'center',
-    },
     list: {
         padding: spacing.md,
     },
-    entryCard: {
+    recordCard: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: colors.surface,
@@ -401,11 +374,11 @@ const styles = StyleSheet.create({
         ...typography.headlineSmall,
         color: colors.primary,
     },
-    entryInfo: {
+    recordInfo: {
         flex: 1,
         marginLeft: spacing.md,
     },
-    entryName: {
+    recordName: {
         ...typography.bodyLarge,
         color: colors.textPrimary,
         fontWeight: '600',
@@ -413,28 +386,41 @@ const styles = StyleSheet.create({
     currentUserName: {
         color: colors.primary,
     },
-    statsRow: {
+    liftDetails: {
         flexDirection: 'row',
         marginTop: spacing.xs,
-        gap: spacing.md,
     },
-    statItem: {
-        ...typography.labelSmall,
+    liftWeight: {
+        ...typography.bodySmall,
         color: colors.textMuted,
     },
-    pointsContainer: {
+    prContainer: {
         alignItems: 'flex-end',
     },
-    points: {
+    prValue: {
         ...typography.statsSmall,
         color: colors.textPrimary,
     },
-    top3Points: {
+    top3PrValue: {
         color: colors.primary,
     },
-    pointsLabel: {
+    prLabel: {
         ...typography.labelSmall,
         color: colors.textMuted,
+    },
+    verifiedBadge: {
+        backgroundColor: colors.valid,
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: spacing.xs,
+    },
+    verifiedText: {
+        color: colors.background,
+        fontSize: 10,
+        fontWeight: '700',
     },
     emptyState: {
         alignItems: 'center',

@@ -134,17 +134,21 @@ export default function TribunalVoteScreen({ navigation }: Props) {
 
         // Check if majority reached
         if (validVotes >= majorityNeeded) {
-            // Award points (10 for tribunal, 15 for PR)
             const isPR = workout.caption?.includes('PR CLAIM');
             await supabase
                 .from('workouts')
-                .update({ points: isPR ? 15 : 10 })
+                .update({ 
+                    points: isPR ? 15 : 10,
+                    is_verified: true,
+                })
                 .eq('id', workoutId);
         } else if (capVotes >= majorityNeeded) {
-            // CAP - no points
             await supabase
                 .from('workouts')
-                .update({ points: 0 })
+                .update({ 
+                    points: 0,
+                    is_verified: false,
+                })
                 .eq('id', workoutId);
         }
     };

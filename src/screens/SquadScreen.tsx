@@ -10,6 +10,8 @@ import {
     Image,
     Alert,
     Share,
+    Clipboard,
+    ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -20,6 +22,12 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 type Squad = Database['public']['Tables']['squads']['Row'];
 type Profile = Database['public']['Tables']['profiles']['Row'];
 
+interface SquadStats {
+    totalWorkouts: number;
+    activeStreaks: number;
+    topStreak: number;
+}
+
 type Props = {
     navigation: NativeStackNavigationProp<any>;
 };
@@ -27,6 +35,11 @@ type Props = {
 export default function SquadScreen({ navigation }: Props) {
     const [squad, setSquad] = useState<Squad | null>(null);
     const [members, setMembers] = useState<Profile[]>([]);
+    const [squadStats, setSquadStats] = useState<SquadStats>({
+        totalWorkouts: 0,
+        activeStreaks: 0,
+        topStreak: 0,
+    });
     const [loading, setLoading] = useState(true);
     const [isLeader, setIsLeader] = useState(false);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -80,10 +93,58 @@ export default function SquadScreen({ navigation }: Props) {
                     .filter(Boolean) as Profile[];
                 setMembers(profiles);
             }
+
+            // Fetch squad stats
+            await fetchSquadStats(membership.squad_id);
         } catch (error) {
             console.error('Error fetching squad:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchSquadStats = async (squadId: string) => {
+        try {
+            // Get total workouts for the squad
+            const { count: totalWorkouts } = await supabase
+                .from('workouts')
+                .select('*', { count: 'exact', head: true })
+                .eq('squad_id', squadId);
+
+            // Get squad members' streak data
+            const { data: memberProfiles } = await supabase
+                .from('squad_members')
+                .select('profiles(current_streak, longest_streak)')
+                .eq('squad_id', squadId);
+
+            let activeStreaks = 0;
+            let topStreak = 0;
+
+            if (memberProfiles) {
+                memberProfiles.forEach((member: any) => {
+                    if (member.profiles) {
+                        const { current_streak, longest_streak } = member.profiles;
+
+                        // Count active streaks (current_streak > 0)
+                        if (current_streak > 0) {
+                            activeStreaks++;
+                        }
+
+                        // Track highest longest_streak
+                        if (longest_streak > topStreak) {
+                            topStreak = longest_streak;
+                        }
+                    }
+                });
+            }
+
+            setSquadStats({
+                totalWorkouts: totalWorkouts || 0,
+                activeStreaks,
+                topStreak,
+            });
+        } catch (error) {
+            console.error('Error fetching squad stats:', error);
         }
     };
 
@@ -99,6 +160,50 @@ export default function SquadScreen({ navigation }: Props) {
         }
     };
 
+    const copyInviteCode = async () => {
+        if (!squad) return;
+
+        try {
+            Clipboard.setString(squad.invite_code);
+            Alert.alert('Copied!', 'Invite code copied to clipboard');
+        } catch (error) {
+            console.error('Error copying:', error);
+        }
+    };
+
+    const transferLeadership = async (newLeaderId: string) => {
+        if (!squad || !isLeader) return;
+
+        const newLeader = members.find(m => m.id === newLeaderId);
+
+        Alert.alert(
+            'Transfer Leadership?',
+            `Make ${newLeader?.username || 'this member'} the new squad leader? You will lose leader privileges.`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Transfer',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            const { error } = await supabase
+                                .from('squads')
+                                .update({ leader_id: newLeaderId })
+                                .eq('id', squad.id);
+
+                            if (error) throw error;
+
+                            setSquad(prev => prev ? { ...prev, leader_id: newLeaderId } : null);
+                            setIsLeader(false);
+                            Alert.alert('Success', 'Leadership transferred successfully!');
+                        } catch (error: any) {
+                            Alert.alert('Error', error.message || 'Failed to transfer leadership');
+                        }
+                    },
+                },
+            ]
+        );
+    };
     const leaveSquad = async () => {
         if (!squad || !currentUserId) return;
 
@@ -167,6 +272,24 @@ export default function SquadScreen({ navigation }: Props) {
         const handleMemberPress = () => {
             if (isCurrentUser) {
                 navigation.navigate('Profile');
+            } else if (isLeader && !isMemberLeader) {
+                // Show leader actions for other members
+                Alert.alert(
+                    `Manage ${item.username}`,
+                    'What would you like to do?',
+                    [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                            text: 'Transfer Leadership',
+                            onPress: () => transferLeadership(item.id),
+                        },
+                        {
+                            text: 'Remove from Squad',
+                            style: 'destructive',
+                            onPress: () => removeMember(item.id),
+                        },
+                    ]
+                );
             }
         };
 
@@ -174,7 +297,7 @@ export default function SquadScreen({ navigation }: Props) {
             <TouchableOpacity
                 style={styles.memberCard}
                 onPress={handleMemberPress}
-                activeOpacity={isCurrentUser ? 0.7 : 1}
+                activeOpacity={0.7}
             >
                 <View style={styles.memberAvatar}>
                     {item.avatar_url ? (
@@ -186,20 +309,25 @@ export default function SquadScreen({ navigation }: Props) {
                     )}
                 </View>
                 <View style={styles.memberInfo}>
-                    <Text style={styles.memberName}>
-                        {item.username || 'Unknown'} {isCurrentUser && '(You) →'}
-                    </Text>
+                    <View style={styles.memberNameRow}>
+                        <Text style={styles.memberName}>
+                            {item.username || 'Unknown'} {isCurrentUser && '(You)'}
+                        </Text>
+                        {item.current_streak > 0 && (
+                            <Text style={styles.streakBadge}>
+                                🔥 {item.current_streak}
+                            </Text>
+                        )}
+                    </View>
                     {isMemberLeader && (
                         <Text style={styles.leaderBadge}>👑 Squad Leader</Text>
                     )}
                 </View>
-                {isLeader && !isMemberLeader && (
-                    <TouchableOpacity
-                        style={styles.removeButton}
-                        onPress={() => removeMember(item.id)}
-                    >
-                        <Text style={styles.removeButtonText}>✕</Text>
-                    </TouchableOpacity>
+                {isCurrentUser && (
+                    <Text style={styles.memberArrow}>→</Text>
+                )}
+                {isLeader && !isMemberLeader && !isCurrentUser && (
+                    <Text style={styles.memberArrow}>⚙️</Text>
                 )}
             </TouchableOpacity>
         );
@@ -244,49 +372,80 @@ export default function SquadScreen({ navigation }: Props) {
                 <Text style={styles.headerTitle}>YOUR SQUAD</Text>
             </View>
 
-            {squad && (
-                <>
-                    {/* Squad Info */}
-                    <View style={styles.squadInfo}>
-                        <Text style={styles.squadName}>{squad.name}</Text>
-                        <View style={styles.squadMeta}>
-                            <View style={styles.tierBadge}>
-                                <Text style={styles.tierText}>
-                                    {squad.plan_tier.toUpperCase()}
+            <ScrollView showsVerticalScrollIndicator={false}>
+                {squad && (
+                    <>
+                        {/* Squad Info */}
+                        <View style={styles.squadInfo}>
+                            <Text style={styles.squadName}>{squad.name}</Text>
+                            <View style={styles.squadMeta}>
+                                <View style={styles.tierBadge}>
+                                    <Text style={styles.tierText}>
+                                        {squad.plan_tier.toUpperCase()}
+                                    </Text>
+                                </View>
+                                <Text style={styles.memberCount}>
+                                    {members.length}/{squad.member_limit} members
                                 </Text>
                             </View>
-                            <Text style={styles.memberCount}>
-                                {members.length}/{squad.member_limit} members
-                            </Text>
                         </View>
-                    </View>
 
-                    {/* Invite Code */}
-                    <TouchableOpacity style={styles.inviteCard} onPress={shareInviteCode}>
-                        <View>
-                            <Text style={styles.inviteLabel}>INVITE CODE</Text>
-                            <Text style={styles.inviteCode}>{squad.invite_code}</Text>
+                        {/* Squad Stats */}
+                        <View style={styles.statsContainer}>
+                            <Text style={styles.sectionTitle}>SQUAD STATS</Text>
+                            <View style={styles.statsGrid}>
+                                <View style={styles.statCard}>
+                                    <Text style={styles.statNumber}>{squadStats.totalWorkouts}</Text>
+                                    <Text style={styles.statLabel}>Total Workouts</Text>
+                                </View>
+                                <View style={styles.statCard}>
+                                    <Text style={styles.statNumber}>{squadStats.activeStreaks}</Text>
+                                    <Text style={styles.statLabel}>Active Streaks</Text>
+                                </View>
+                                <View style={styles.statCard}>
+                                    <Text style={styles.statNumber}>{squadStats.topStreak}</Text>
+                                    <Text style={styles.statLabel}>Top Streak</Text>
+                                </View>
+                            </View>
                         </View>
-                        <Text style={styles.shareButton}>📤 Share</Text>
-                    </TouchableOpacity>
 
-                    {/* Members List */}
-                    <Text style={styles.sectionTitle}>MEMBERS</Text>
-                    <FlatList
-                        data={members}
-                        renderItem={renderMember}
-                        keyExtractor={(item) => item.id}
-                        contentContainerStyle={styles.membersList}
-                    />
+                        {/* Invite Code */}
+                        <View style={styles.inviteSection}>
+                            <Text style={styles.sectionTitle}>INVITE CODE</Text>
+                            <View style={styles.inviteCard}>
+                                <View style={styles.inviteCodeContainer}>
+                                    <Text style={styles.inviteCode}>{squad.invite_code}</Text>
+                                </View>
+                                <View style={styles.inviteActions}>
+                                    <TouchableOpacity style={styles.inviteButton} onPress={copyInviteCode}>
+                                        <Text style={styles.inviteButtonText}>📋 Copy</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={styles.inviteButton} onPress={shareInviteCode}>
+                                        <Text style={styles.inviteButtonText}>📤 Share</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        </View>
 
-                    {/* Leave Squad */}
-                    {!isLeader && (
-                        <TouchableOpacity style={styles.leaveButton} onPress={leaveSquad}>
-                            <Text style={styles.leaveButtonText}>Leave Squad</Text>
-                        </TouchableOpacity>
-                    )}
-                </>
-            )}
+                        {/* Members List */}
+                        <View style={styles.membersSection}>
+                            <Text style={styles.sectionTitle}>MEMBERS</Text>
+                            {members.map((member) => (
+                                <View key={member.id}>
+                                    {renderMember({ item: member })}
+                                </View>
+                            ))}
+                        </View>
+
+                        {/* Leave Squad */}
+                        {!isLeader && (
+                            <TouchableOpacity style={styles.leaveButton} onPress={leaveSquad}>
+                                <Text style={styles.leaveButtonText}>Leave Squad</Text>
+                            </TouchableOpacity>
+                        )}
+                    </>
+                )}
+            </ScrollView>
         </SafeAreaView>
     );
 }
@@ -384,42 +543,77 @@ const styles = StyleSheet.create({
         ...typography.bodyMedium,
         color: colors.textSecondary,
     },
-    // Invite Card
-    inviteCard: {
+    // Squad Stats
+    statsContainer: {
+        paddingHorizontal: spacing.lg,
+        marginBottom: spacing.lg,
+    },
+    statsGrid: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'center',
+        gap: spacing.sm,
+    },
+    statCard: {
+        flex: 1,
         backgroundColor: colors.surface,
-        marginHorizontal: spacing.lg,
+        padding: spacing.md,
+        borderRadius: borderRadius.md,
+        alignItems: 'center',
+    },
+    statNumber: {
+        ...typography.statsSmall,
+        color: colors.primary,
+        marginBottom: spacing.xs,
+    },
+    statLabel: {
+        ...typography.labelSmall,
+        color: colors.textMuted,
+        textAlign: 'center',
+    },
+    // Invite Section
+    inviteSection: {
+        paddingHorizontal: spacing.lg,
+        marginBottom: spacing.lg,
+    },
+    inviteCard: {
+        backgroundColor: colors.surface,
         padding: spacing.md,
         borderRadius: borderRadius.md,
         borderWidth: 1,
         borderColor: colors.primary,
     },
-    inviteLabel: {
-        ...typography.labelSmall,
-        color: colors.textMuted,
-        marginBottom: spacing.xs,
+    inviteCodeContainer: {
+        alignItems: 'center',
+        marginBottom: spacing.md,
     },
     inviteCode: {
         ...typography.headlineLarge,
         color: colors.primary,
         letterSpacing: 4,
     },
-    shareButton: {
+    inviteActions: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+    },
+    inviteButton: {
+        backgroundColor: colors.primary + '20',
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.sm,
+        borderRadius: borderRadius.sm,
+    },
+    inviteButtonText: {
         ...typography.labelMedium,
         color: colors.primary,
     },
     // Members
+    membersSection: {
+        paddingHorizontal: spacing.lg,
+        marginBottom: spacing.lg,
+    },
     sectionTitle: {
         ...typography.labelMedium,
         color: colors.textMuted,
-        paddingHorizontal: spacing.lg,
-        paddingTop: spacing.lg,
-        paddingBottom: spacing.sm,
-    },
-    membersList: {
-        paddingHorizontal: spacing.lg,
+        marginBottom: spacing.sm,
     },
     memberCard: {
         flexDirection: 'row',
@@ -450,25 +644,34 @@ const styles = StyleSheet.create({
         flex: 1,
         marginLeft: spacing.md,
     },
+    memberNameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
     memberName: {
         ...typography.bodyLarge,
         color: colors.textPrimary,
         fontWeight: '600',
+        flex: 1,
+    },
+    streakBadge: {
+        ...typography.labelSmall,
+        color: colors.warning,
+        backgroundColor: colors.warning + '20',
+        paddingHorizontal: spacing.xs,
+        paddingVertical: 2,
+        borderRadius: borderRadius.sm,
+        marginLeft: spacing.sm,
     },
     leaderBadge: {
         ...typography.labelSmall,
         color: colors.warning,
         marginTop: spacing.xs,
     },
-    removeButton: {
-        width: 32,
-        height: 32,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    removeButtonText: {
+    memberArrow: {
         ...typography.bodyLarge,
-        color: colors.error,
+        color: colors.textMuted,
     },
     leaveButton: {
         margin: spacing.lg,

@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text, View, StyleSheet } from 'react-native';
+import { Text, View, StyleSheet, ActivityIndicator } from 'react-native';
 import { colors, typography } from '../theme';
+import { supabase } from '../lib/supabase';
 
 import HomeScreen from '../screens/HomeScreen';
 import FitCheckScreen from '../screens/FitCheckScreen';
@@ -21,16 +22,23 @@ import ProfileScreen from '../screens/ProfileScreen';
 import WorkoutsScreen from '../screens/WorkoutsScreen';
 import EditWorkoutScreen from '../screens/EditWorkoutScreen';
 import ActiveWorkoutScreen from '../screens/ActiveWorkoutScreen';
+import WelcomeScreen from '../screens/onboarding/WelcomeScreen';
+import SquadChoiceScreen from '../screens/onboarding/SquadChoiceScreen';
+import SettingsScreen from '../screens/SettingsScreen';
+import ChallengesScreen from '../screens/ChallengesScreen';
 import { Exercise } from '../data/exercises';
 
 export type MainStackParamList = {
     MainTabs: undefined;
+    Welcome: undefined;
+    SquadChoice: undefined;
     FitCheck: undefined;
     TribunalUpload: undefined;
     TribunalVote: undefined;
     CreateSquad: undefined;
     JoinSquad: undefined;
     Profile: undefined;
+    Settings: undefined;
     PRLeaderboard: { exercise: Exercise };
     BodyStats: undefined;
     StatsOverview: undefined;
@@ -43,7 +51,7 @@ export type TabParamList = {
     Home: undefined;
     Schedule: undefined;
     Workouts: undefined;
-    Tribunal: undefined;
+    Challenges: undefined;
     Leaderboard: undefined;
     Squad: undefined;
 };
@@ -57,8 +65,8 @@ function TabIcon({ name, focused }: { name: string; focused: boolean }) {
         Home: '🏠',
         Schedule: '📅',
         Workouts: '🏋️',
-        Tribunal: '⚖️',
-        Leaderboard: '🏆',
+        Challenges: '🏆',
+        Leaderboard: '📊',
         Squad: '👥',
     };
 
@@ -66,7 +74,7 @@ function TabIcon({ name, focused }: { name: string; focused: boolean }) {
         Home: 'Home',
         Schedule: 'Schedule',
         Workouts: 'Workouts',
-        Tribunal: 'Tribunal',
+        Challenges: 'Challenges',
         Leaderboard: 'Rank',
         Squad: 'Squad',
     };
@@ -99,7 +107,7 @@ function MainTabs() {
             <Tab.Screen name="Home" component={HomeScreen} />
             <Tab.Screen name="Schedule" component={ScheduleScreen} />
             <Tab.Screen name="Workouts" component={WorkoutsScreen} />
-            <Tab.Screen name="Tribunal" component={TribunalVoteScreen} />
+            <Tab.Screen name="Challenges" component={ChallengesScreen} />
             <Tab.Screen name="Leaderboard" component={LeaderboardScreen} />
             <Tab.Screen name="Squad" component={SquadScreen} />
         </Tab.Navigator>
@@ -108,6 +116,45 @@ function MainTabs() {
 
 // Main Stack Navigator
 export default function MainNavigator() {
+    const [hasSquad, setHasSquad] = useState<boolean | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        checkSquadMembership();
+    }, []);
+
+    const checkSquadMembership = async () => {
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                setHasSquad(false);
+                setLoading(false);
+                return;
+            }
+
+            const { data: membership } = await supabase
+                .from('squad_members')
+                .select('squad_id')
+                .eq('user_id', user.id)
+                .single();
+
+            setHasSquad(!!membership);
+        } catch (error) {
+            console.error('Error checking squad membership:', error);
+            setHasSquad(false);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (loading) {
+        return (
+            <View style={styles.loading}>
+                <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+        );
+    }
+
     return (
         <Stack.Navigator
             screenOptions={{
@@ -115,7 +162,21 @@ export default function MainNavigator() {
                 contentStyle: { backgroundColor: colors.background },
                 animation: 'slide_from_bottom',
             }}
+            initialRouteName={hasSquad ? 'MainTabs' : 'Welcome'}
         >
+            {/* Onboarding Screens */}
+            <Stack.Screen
+                name="Welcome"
+                component={WelcomeScreen}
+                options={{ animation: 'fade' }}
+            />
+            <Stack.Screen
+                name="SquadChoice"
+                component={SquadChoiceScreen}
+                options={{ animation: 'slide_from_right' }}
+            />
+
+            {/* Main App */}
             <Stack.Screen name="MainTabs" component={MainTabs} />
             <Stack.Screen
                 name="FitCheck"
@@ -182,6 +243,12 @@ export default function MainNavigator() {
 }
 
 const styles = StyleSheet.create({
+    loading: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: colors.background,
+    },
     tabBar: {
         backgroundColor: colors.surface,
         borderTopWidth: 1,

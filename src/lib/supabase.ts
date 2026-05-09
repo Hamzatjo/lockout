@@ -67,9 +67,11 @@ export type Database = {
                     username: string | null;
                     avatar_url: string | null;
                     push_token: string | null;
+                    current_streak: number;
+                    longest_streak: number;
                     created_at: string;
                 };
-                Insert: Omit<Database['public']['Tables']['profiles']['Row'], 'created_at'>;
+                Insert: Omit<Database['public']['Tables']['profiles']['Row'], 'created_at' | 'current_streak' | 'longest_streak'>;
                 Update: Partial<Database['public']['Tables']['profiles']['Insert']>;
             };
             squads: {
@@ -221,6 +223,36 @@ export type Database = {
                 };
                 Insert: Omit<Database['public']['Tables']['exercise_logs']['Row'], 'id'>;
                 Update: Partial<Database['public']['Tables']['exercise_logs']['Insert']>;
+            };
+            challenges: {
+                Row: {
+                    id: string;
+                    squad_id: string;
+                    title: string;
+                    description: string;
+                    challenge_type: 'individual' | 'group';
+                    target_value: number;
+                    current_value: number;
+                    point_reward: number;
+                    starts_at: string;
+                    ends_at: string;
+                    created_at: string;
+                    is_active: boolean;
+                };
+                Insert: Omit<Database['public']['Tables']['challenges']['Row'], 'id' | 'created_at' | 'current_value'>;
+                Update: Partial<Database['public']['Tables']['challenges']['Insert']>;
+            };
+            challenge_participants: {
+                Row: {
+                    id: string;
+                    challenge_id: string;
+                    user_id: string;
+                    progress: number;
+                    completed_at: string | null;
+                    created_at: string;
+                };
+                Insert: Omit<Database['public']['Tables']['challenge_participants']['Row'], 'id' | 'created_at'>;
+                Update: Partial<Database['public']['Tables']['challenge_participants']['Insert']>;
             };
         };
     };

@@ -14,13 +14,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, typography, spacing, borderRadius } from '../theme';
 import { supabase } from '../lib/supabase';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RouteProp } from '@react-navigation/native';
 
 type Props = {
     navigation: NativeStackNavigationProp<any>;
+    route: RouteProp<{ params: { inviteCode?: string } }>;
 };
 
-export default function JoinSquadScreen({ navigation }: Props) {
-    const [code, setCode] = useState('');
+export default function JoinSquadScreen({ navigation, route }: Props) {
+    const [code, setCode] = useState(route.params?.inviteCode?.toUpperCase() || '');
     const [loading, setLoading] = useState(false);
 
     const joinSquad = async () => {

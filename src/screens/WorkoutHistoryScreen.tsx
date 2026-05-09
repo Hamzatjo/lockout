@@ -7,6 +7,7 @@ import {
     TouchableOpacity,
     SafeAreaView,
     ActivityIndicator,
+    RefreshControl,
 } from 'react-native';
 import { colors, typography } from '../theme';
 import { supabase } from '../lib/supabase';
@@ -31,6 +32,7 @@ export default function WorkoutHistoryScreen() {
     const [selectedDayWorkouts, setSelectedDayWorkouts] = useState<WorkoutHistoryItem[]>([]);
     const [filter, setFilter] = useState<FilterType>('all');
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
 
     useEffect(() => {
         fetchWorkoutHistory();
@@ -74,7 +76,13 @@ export default function WorkoutHistoryScreen() {
             console.error('Error fetching workout history:', error);
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
+    };
+
+    const onRefresh = () => {
+        setRefreshing(true);
+        fetchWorkoutHistory();
     };
 
     const updateSelectedDayWorkouts = () => {
@@ -229,7 +237,16 @@ export default function WorkoutHistoryScreen() {
 
     return (
         <SafeAreaView style={styles.container}>
-            <ScrollView style={styles.scrollView}>
+            <ScrollView
+                style={styles.scrollView}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor={colors.primary}
+                    />
+                }
+            >
                 {/* Header */}
                 <View style={styles.header}>
                     <Text style={styles.title}>Workout History</Text>

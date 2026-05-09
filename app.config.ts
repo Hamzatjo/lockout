@@ -37,6 +37,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     'expo-camera',
     'expo-notifications'
   ],
+  scheme: 'lockout',
   extra: {
     supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
     supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,

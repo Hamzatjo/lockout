@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
+import * as Haptics from 'expo-haptics';
 import { colors, typography, spacing, borderRadius } from '../theme';
 import { supabase } from '../lib/supabase';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -51,6 +52,13 @@ export default function FitCheckScreen({ navigation }: Props) {
 
     const takePicture = async () => {
         if (!cameraRef.current) return;
+
+        // Light haptic feedback on capture
+        try {
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        } catch (error) {
+            // Haptics not supported on device, continue silently
+        }
 
         try {
             const result = await cameraRef.current.takePictureAsync({
@@ -90,6 +98,13 @@ export default function FitCheckScreen({ navigation }: Props) {
 
     const submitCheckIn = async () => {
         if (!photo) return;
+
+        // Light haptic feedback on submit
+        try {
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        } catch (error) {
+            // Haptics not supported on device, continue silently
+        }
 
         setLoading(true);
         try {
@@ -162,6 +177,13 @@ export default function FitCheckScreen({ navigation }: Props) {
             });
 
             if (insertError) throw insertError;
+
+            // Success haptic feedback
+            try {
+                await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch (error) {
+                // Haptics not supported on device, continue silently
+            }
 
             Alert.alert('✅ Fit Check Posted!', 'Your squad can see you showed up.', [
                 { text: 'Nice!', onPress: () => navigation.goBack() },

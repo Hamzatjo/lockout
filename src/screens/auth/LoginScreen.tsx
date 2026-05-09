@@ -24,6 +24,7 @@ export default function LoginScreen({ navigation }: Props) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
     const handleLogin = async () => {
         if (!email || !password) {
@@ -65,14 +66,24 @@ export default function LoginScreen({ navigation }: Props) {
                         keyboardType="email-address"
                         autoCorrect={false}
                     />
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Password"
-                        placeholderTextColor={colors.textMuted}
-                        value={password}
-                        onChangeText={setPassword}
-                        secureTextEntry
-                    />
+                    <View style={styles.passwordContainer}>
+                        <TextInput
+                            style={styles.passwordInput}
+                            placeholder="Password"
+                            placeholderTextColor={colors.textMuted}
+                            value={password}
+                            onChangeText={setPassword}
+                            secureTextEntry={!showPassword}
+                        />
+                        <TouchableOpacity
+                            style={styles.passwordToggle}
+                            onPress={() => setShowPassword(!showPassword)}
+                        >
+                            <Text style={styles.passwordToggleText}>
+                                {showPassword ? '🙈' : '👁️'}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
 
                     <TouchableOpacity
                         style={[styles.button, loading && styles.buttonDisabled]}
@@ -84,6 +95,13 @@ export default function LoginScreen({ navigation }: Props) {
                         ) : (
                             <Text style={styles.buttonText}>ENTER THE ARENA</Text>
                         )}
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={styles.forgotPassword}
+                        onPress={() => Alert.alert('Password Reset', 'Check your email for reset instructions')}
+                    >
+                        <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -136,6 +154,28 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: colors.border,
     },
+    passwordContainer: {
+        position: 'relative',
+    },
+    passwordInput: {
+        backgroundColor: colors.surface,
+        borderRadius: borderRadius.md,
+        padding: spacing.md,
+        paddingRight: 50,
+        color: colors.textPrimary,
+        ...typography.bodyLarge,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    passwordToggle: {
+        position: 'absolute',
+        right: spacing.md,
+        top: spacing.md,
+        padding: 4,
+    },
+    passwordToggleText: {
+        fontSize: 18,
+    },
     button: {
         backgroundColor: colors.primary,
         borderRadius: borderRadius.md,
@@ -149,6 +189,14 @@ const styles = StyleSheet.create({
     buttonText: {
         ...typography.labelLarge,
         color: colors.background,
+    },
+    forgotPassword: {
+        alignItems: 'center',
+        marginTop: spacing.md,
+    },
+    forgotPasswordText: {
+        ...typography.bodyMedium,
+        color: colors.primary,
     },
     linkContainer: {
         marginTop: spacing.xl,

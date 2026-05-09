@@ -7,6 +7,7 @@ import {
     SafeAreaView,
     ActivityIndicator,
     TouchableOpacity,
+    RefreshControl,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { colors, typography, spacing, borderRadius } from '../theme';
@@ -28,6 +29,7 @@ export default function WeeklySummaryScreen() {
     const navigation = useNavigation();
     const [stats, setStats] = useState<WeeklyStats | null>(null);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [weekDates, setWeekDates] = useState<{ start: Date; end: Date } | null>(null);
 
     useEffect(() => {
@@ -178,7 +180,13 @@ export default function WeeklySummaryScreen() {
             console.error('Error fetching weekly stats:', error);
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
+    };
+
+    const onRefresh = () => {
+        setRefreshing(true);
+        fetchWeeklyStats();
     };
 
     const formatWeekRange = () => {
@@ -228,7 +236,16 @@ export default function WeeklySummaryScreen() {
 
     return (
         <SafeAreaView style={styles.container}>
-            <ScrollView style={styles.scrollView}>
+            <ScrollView
+                style={styles.scrollView}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor={colors.primary}
+                    />
+                }
+            >
                 {/* Header */}
                 <View style={styles.header}>
                     <TouchableOpacity

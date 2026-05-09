@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { CommonActions } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { colors, typography } from '../theme';
 import { supabase } from '../lib/supabase';
@@ -206,7 +207,32 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
           text: 'Log Out',
           style: 'destructive',
           onPress: async () => {
-            await supabase.auth.signOut();
+            try {
+              // Sign out from Supabase
+              const { error } = await supabase.auth.signOut();
+
+              if (error) {
+                throw error;
+              }
+
+              // Clear any local state
+              setProfile(null);
+              setUsername('');
+              setEmail('');
+              setPushEnabled(false);
+
+              // Reset navigation stack to prevent going back to authenticated screens
+              // The auth state change listener in App.tsx will handle navigation to auth screens
+              navigation.dispatch(
+                CommonActions.reset({
+                  index: 0,
+                  routes: [{ name: 'Auth' }],
+                })
+              );
+            } catch (error: any) {
+              console.error('Logout error:', error);
+              Alert.alert('Error', error.message || 'Failed to log out. Please try again.');
+            }
           },
         },
       ]

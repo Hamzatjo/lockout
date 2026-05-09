@@ -10,9 +10,11 @@ import {
     ActivityIndicator,
     FlatList,
     Image,
+    RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Video, ResizeMode } from 'expo-av';
+import * as Haptics from 'expo-haptics';
 import { colors, typography, spacing, borderRadius, shadows } from '../theme';
 import { supabase, Database } from '../lib/supabase';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -29,6 +31,7 @@ type Props = {
 export default function TribunalVoteScreen({ navigation }: Props) {
     const [pendingWorkouts, setPendingWorkouts] = useState<Workout[]>([]);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [votingWorkoutId, setVotingWorkoutId] = useState<string | null>(null);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
@@ -72,11 +75,24 @@ export default function TribunalVoteScreen({ navigation }: Props) {
             console.error('Error fetching pending workouts:', error);
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
+    };
+
+    const onRefresh = () => {
+        setRefreshing(true);
+        fetchPendingWorkouts();
     };
 
     const submitVote = async (workoutId: string, vote: 'valid' | 'cap') => {
         if (!currentUserId) return;
+
+        // Haptic feedback for vote action
+        try {
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        } catch (error) {
+            // Haptics not supported on device, continue silently
+        }
 
         setVotingWorkoutId(workoutId);
         try {
@@ -93,6 +109,13 @@ export default function TribunalVoteScreen({ navigation }: Props) {
 
             // Remove from pending list
             setPendingWorkouts(prev => prev.filter(w => w.id !== workoutId));
+
+            // Success haptic feedback
+            try {
+                await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch (error) {
+                // Haptics not supported on device, continue silently
+            }
 
             Alert.alert(
                 vote === 'valid' ? '✅ VALID' : '🧢 CAP',
@@ -262,6 +285,13 @@ export default function TribunalVoteScreen({ navigation }: Props) {
                 renderItem={renderWorkout}
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={styles.list}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor={colors.primary}
+                    />
+                }
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
                         <Text style={styles.emptyEmoji}>⚖️</Text>

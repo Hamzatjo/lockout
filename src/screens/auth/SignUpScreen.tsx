@@ -27,10 +27,18 @@ export default function SignUpScreen({ navigation }: Props) {
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    const [acceptedTerms, setAcceptedTerms] = useState(false);
 
     const handleSignUp = async () => {
         if (!username || !email || !password || !confirmPassword) {
             Alert.alert('Error', 'Please fill in all fields');
+            return;
+        }
+
+        if (!acceptedTerms) {
+            Alert.alert('Error', 'Please accept the terms of service');
             return;
         }
 
@@ -103,22 +111,54 @@ export default function SignUpScreen({ navigation }: Props) {
                             keyboardType="email-address"
                             autoCorrect={false}
                         />
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Password"
-                            placeholderTextColor={colors.textMuted}
-                            value={password}
-                            onChangeText={setPassword}
-                            secureTextEntry
-                        />
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Confirm Password"
-                            placeholderTextColor={colors.textMuted}
-                            value={confirmPassword}
-                            onChangeText={setConfirmPassword}
-                            secureTextEntry
-                        />
+                        <View style={styles.passwordContainer}>
+                            <TextInput
+                                style={styles.passwordInput}
+                                placeholder="Password"
+                                placeholderTextColor={colors.textMuted}
+                                value={password}
+                                onChangeText={setPassword}
+                                secureTextEntry={!showPassword}
+                            />
+                            <TouchableOpacity
+                                style={styles.passwordToggle}
+                                onPress={() => setShowPassword(!showPassword)}
+                            >
+                                <Text style={styles.passwordToggleText}>
+                                    {showPassword ? '🙈' : '👁️'}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                        <View style={styles.passwordContainer}>
+                            <TextInput
+                                style={styles.passwordInput}
+                                placeholder="Confirm Password"
+                                placeholderTextColor={colors.textMuted}
+                                value={confirmPassword}
+                                onChangeText={setConfirmPassword}
+                                secureTextEntry={!showConfirmPassword}
+                            />
+                            <TouchableOpacity
+                                style={styles.passwordToggle}
+                                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                            >
+                                <Text style={styles.passwordToggleText}>
+                                    {showConfirmPassword ? '🙈' : '👁️'}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        <TouchableOpacity
+                            style={styles.termsContainer}
+                            onPress={() => setAcceptedTerms(!acceptedTerms)}
+                        >
+                            <View style={[styles.checkbox, acceptedTerms && styles.checkboxChecked]}>
+                                {acceptedTerms && <Text style={styles.checkmark}>✓</Text>}
+                            </View>
+                            <Text style={styles.termsText}>
+                                I accept the Terms of Service and Privacy Policy
+                            </Text>
+                        </TouchableOpacity>
 
                         <TouchableOpacity
                             style={[styles.button, loading && styles.buttonDisabled]}
@@ -191,6 +231,57 @@ const styles = StyleSheet.create({
         ...typography.bodyLarge,
         borderWidth: 1,
         borderColor: colors.border,
+    },
+    passwordContainer: {
+        position: 'relative',
+    },
+    passwordInput: {
+        backgroundColor: colors.surface,
+        borderRadius: borderRadius.md,
+        padding: spacing.md,
+        paddingRight: 50,
+        color: colors.textPrimary,
+        ...typography.bodyLarge,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    passwordToggle: {
+        position: 'absolute',
+        right: spacing.md,
+        top: spacing.md,
+        padding: 4,
+    },
+    passwordToggleText: {
+        fontSize: 18,
+    },
+    termsContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: spacing.sm,
+    },
+    checkbox: {
+        width: 20,
+        height: 20,
+        borderWidth: 2,
+        borderColor: colors.border,
+        borderRadius: 4,
+        marginRight: spacing.sm,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    checkboxChecked: {
+        backgroundColor: colors.primary,
+        borderColor: colors.primary,
+    },
+    checkmark: {
+        color: colors.background,
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    termsText: {
+        ...typography.bodySmall,
+        color: colors.textSecondary,
+        flex: 1,
     },
     button: {
         backgroundColor: colors.primary,

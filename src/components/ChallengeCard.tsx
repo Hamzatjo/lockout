@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { colors, typography } from '../theme';
 import { Database, supabase } from '../lib/supabase';
 
@@ -85,6 +86,13 @@ export default function ChallengeCard({
 
   const joinChallenge = async () => {
     try {
+      // Light haptic feedback on button press
+      try {
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      } catch (error) {
+        // Haptics not supported on device, continue silently
+      }
+
       setJoining(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -98,6 +106,13 @@ export default function ChallengeCard({
         });
 
       if (error) throw error;
+
+      // Success haptic feedback
+      try {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch (error) {
+        // Haptics not supported on device, continue silently
+      }
 
       onParticipationChange?.();
     } catch (error) {

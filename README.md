@@ -20,41 +20,51 @@ The app facilitates competition. The group decides the stakes.
 - **Media:** expo-camera, expo-video, expo-image-picker
 - **Notifications:** expo-notifications (push via Supabase)
 
-## Current State (as of Feb 2026)
+## Current State (May 2026)
 
-### ✅ Built
-- Auth (email signup/login via Supabase)
-- Home feed with squad workouts (video autoplay, media viewer)
-- Squad system (create with invite code, join, member limits by plan tier)
-- Tribunal system (video upload + squad voting with majority logic)
-- Fit Check (photo check-in)
-- PR Leaderboard (per-exercise, estimated 1RM calculation)
-- General Leaderboard (weekly/seasonal/all-time, points breakdown)
-- Body Stats tracking
-- Workout logging (custom workouts, exercise picker, active workout tracking)
-- Schedule & events (create gym sessions, join/decline)
-- Push notification infrastructure
-- Dark theme (electric green + purple accent)
-- RLS policies (row-level security on all tables)
-- 8 DB migrations
+### ✅ Phase 1 - Core Polish
+- Onboarding flow (Welcome → Squad Choice → Create/Join)
+- Settings screen (avatar, username, notifications, logout, delete account)
+- Squad management (kick, transfer leadership, leave, invite code copy + share)
+- Streak tracking (DB triggers, auto-calculation, multiplier at 7+ days)
+- Challenges system (AI Commissioner edge function, challenge cards, progress)
+- Push notification triggers (tribunal, votes, challenges, events, streaks)
+- Error boundary + Loading components
+- Custom hooks (useCurrentUser, useSquad, useStreak)
+- Environment config (.env.example + app.config.ts)
 
-### 🚧 Missing / Incomplete
-- [ ] Streak tracking (consecutive check-in days)
-- [ ] Challenges system (squad-created challenges with deadlines + rewards)
-- [ ] Notifications (wired up but no triggers sending them)
-- [ ] Onboarding flow (new user → create/join squad)
-- [ ] Profile editing (avatar upload, username change)
-- [ ] Settings screen (logout, notifications toggle, account deletion)
-- [ ] Squad management (kick members, transfer leadership, leave squad)
-- [ ] Quest system (AI-generated daily challenges — schema exists, no UI)
-- [ ] Workout history / stats visualization
-- [ ] Social features (comments, reactions on feed items)
-- [ ] Invite system (deep links, share invite code)
-- [ ] Offline support / optimistic updates
-- [ ] Error boundaries & loading states (inconsistent)
-- [ ] App icon, splash screen, app store assets
-- [ ] Environment config (.env.example, setup docs)
-- [ ] Tests
+### ✅ Phase 1.5 - Polish
+- StreakBadge component (4 visual tiers with glows)
+- Streak display in Home header + Leaderboard + Profile
+- Profile improvements (stats, settings link, workout count)
+- Notification badges on tabs (active challenges, pending votes)
+
+### ✅ Phase 2 - Engagement
+- Workout History screen (calendar view + daily workout list)
+- Progress Charts (SVG line chart for exercise weight over time)
+- Exercise Progress screen (PR tracking, 1RM estimation)
+- Social reactions on feed (👍🔥💪)
+- Comments on workouts
+- Challenge progress tracking (individual + group, countdown timer)
+- Weekly Summary screen (stats at a glance)
+- 2 new migrations (reactions, comments)
+
+### ✅ Phase 3 - Launch Readiness
+- App configuration (bundle ID, splash, plugins)
+- Deep linking for invites (lockout://join/:code)
+- Splash screen with animation
+- Auth screens polish (branding, show/hide password, validation)
+- Haptic feedback (votes, reactions, check-ins)
+- Pull-to-refresh on all list screens
+- Proper logout flow
+- .gitignore
+
+### 🚧 Remaining
+- [ ] App icon + splash image assets (need design)
+- [ ] Real LLM integration in generate-challenges (currently rule-based)
+- [ ] End-to-end testing with real Supabase instance
+- [ ] App Store / Play Store submission
+- [ ] Landing page
 
 ## Project Structure
 

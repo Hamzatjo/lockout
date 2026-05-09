@@ -15,10 +15,11 @@ import { colors, typography, spacing, borderRadius } from '../theme';
 import { supabase } from '../lib/supabase';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
+import type { MainStackParamList } from '../navigation/MainNavigator';
 
 type Props = {
-    navigation: NativeStackNavigationProp<any>;
-    route: RouteProp<{ params: { inviteCode?: string } }>;
+    navigation: NativeStackNavigationProp<MainStackParamList, 'JoinSquad'>;
+    route: RouteProp<MainStackParamList, 'JoinSquad'>;
 };
 
 export default function JoinSquadScreen({ navigation, route }: Props) {

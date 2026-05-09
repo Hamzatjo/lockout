@@ -59,7 +59,7 @@ export default function App() {
                 },
                 JoinSquad: 'join/:inviteCode',
               },
-            },
+            } as any,
           }}
           theme={{
             dark: true,

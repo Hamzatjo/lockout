@@ -40,7 +40,7 @@ export type MainStackParamList = {
     TribunalUpload: undefined;
     TribunalVote: undefined;
     CreateSquad: undefined;
-    JoinSquad: undefined;
+    JoinSquad: { inviteCode?: string } | undefined;
     Profile: undefined;
     Settings: undefined;
     PRLeaderboard: { exercise: Exercise };

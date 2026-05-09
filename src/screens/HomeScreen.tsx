@@ -15,6 +15,7 @@ import { useEvent } from 'expo';
 import { colors, typography, spacing, borderRadius, shadows } from '../theme';
 import { supabase, Database } from '../lib/supabase';
 import MediaViewer from '../components/MediaViewer';
+import { StreakBadge } from '../components/StreakBadge';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 type Workout = Database['public']['Tables']['workouts']['Row'] & {
@@ -62,6 +63,7 @@ export default function HomeScreen({ navigation }: Props) {
     const [workouts, setWorkouts] = useState<Workout[]>([]);
     const [refreshing, setRefreshing] = useState(false);
     const [squadName, setSquadName] = useState<string | null>(null);
+    const [currentStreak, setCurrentStreak] = useState<number>(0);
     const [selectedMedia, setSelectedMedia] = useState<{
         url: string;
         isVideo: boolean;
@@ -74,6 +76,17 @@ export default function HomeScreen({ navigation }: Props) {
         // Get user's squad
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
+
+        // Get user's current streak
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('current_streak')
+            .eq('id', user.id)
+            .single();
+
+        if (profile) {
+            setCurrentStreak(profile.current_streak || 0);
+        }
 
         const { data: membership } = await supabase
             .from('squad_members')
@@ -213,7 +226,10 @@ export default function HomeScreen({ navigation }: Props) {
             {/* Header */}
             <View style={styles.header}>
                 <Text style={styles.logo}>LOCKOUT</Text>
-                {squadName && <Text style={styles.squadName} numberOfLines={1} ellipsizeMode="tail">{squadName}</Text>}
+                <View style={styles.headerRight}>
+                    {squadName && <Text style={styles.squadName} numberOfLines={1} ellipsizeMode="tail">{squadName}</Text>}
+                    <StreakBadge streak={currentStreak} mode="compact" />
+                </View>
             </View>
 
             {/* Action Buttons */}
@@ -296,10 +312,13 @@ const styles = StyleSheet.create({
         ...typography.headlineLarge,
         color: colors.primary,
     },
+    headerRight: {
+        alignItems: 'flex-end',
+        gap: spacing.xs,
+    },
     squadName: {
         ...typography.labelSmall,
         color: colors.textSecondary,
-        marginTop: spacing.xs,
     },
     logoutButton: {
         padding: spacing.sm,

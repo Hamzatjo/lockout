@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text, View, StyleSheet, ActivityIndicator } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { colors, typography } from '../theme';
 import { supabase } from '../lib/supabase';
 
@@ -60,7 +61,7 @@ const Stack = createNativeStackNavigator<MainStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 
 // Tab Icon Component
-function TabIcon({ name, focused }: { name: string; focused: boolean }) {
+function TabIcon({ name, focused, badge }: { name: string; focused: boolean; badge?: number }) {
     const icons: Record<string, string> = {
         Home: '🏠',
         Schedule: '📅',
@@ -81,9 +82,18 @@ function TabIcon({ name, focused }: { name: string; focused: boolean }) {
 
     return (
         <View style={styles.tabIcon}>
-            <Text style={[styles.tabEmoji, focused && styles.tabEmojiActive]}>
-                {icons[name] || '?'}
-            </Text>
+            <View style={styles.tabIconContainer}>
+                <Text style={[styles.tabEmoji, focused && styles.tabEmojiActive]}>
+                    {icons[name] || '?'}
+                </Text>
+                {badge && badge > 0 && (
+                    <View style={styles.badge}>
+                        <Text style={styles.badgeText}>
+                            {badge > 99 ? '99+' : badge.toString()}
+                        </Text>
+                    </View>
+                )}
+            </View>
             <Text style={[styles.tabLabel, focused && styles.tabLabelActive]} numberOfLines={1}>
                 {labels[name] || name}
             </Text>
@@ -93,15 +103,87 @@ function TabIcon({ name, focused }: { name: string; focused: boolean }) {
 
 // Tab Navigator
 function MainTabs() {
+    const [challengesBadge, setChallengesBadge] = useState(0);
+    const [squadBadge, setSquadBadge] = useState(0);
+
+    const fetchBadgeCounts = async () => {
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+
+            // Get user's squad
+            const { data: membership } = await supabase
+                .from('squad_members')
+                .select('squad_id')
+                .eq('user_id', user.id)
+                .single();
+
+            if (!membership) return;
+
+            // Count active challenges
+            const { count: activeChallenges } = await supabase
+                .from('challenges')
+                .select('*', { count: 'exact', head: true })
+                .eq('squad_id', membership.squad_id)
+                .eq('is_active', true);
+
+            setChallengesBadge(activeChallenges || 0);
+
+            // Count pending tribunal votes (workouts in tribunal that user hasn't voted on)
+            const { data: tribunalWorkouts } = await supabase
+                .from('workouts')
+                .select('id')
+                .eq('squad_id', membership.squad_id)
+                .eq('verification_level', 'tribunal')
+                .eq('is_verified', false);
+
+            if (tribunalWorkouts && tribunalWorkouts.length > 0) {
+                const workoutIds = tribunalWorkouts.map(w => w.id);
+
+                // Get votes by current user for these workouts
+                const { data: userVotes } = await supabase
+                    .from('votes')
+                    .select('workout_id')
+                    .eq('user_id', user.id)
+                    .in('workout_id', workoutIds);
+
+                const votedWorkoutIds = new Set(userVotes?.map(v => v.workout_id) || []);
+                const pendingVotes = tribunalWorkouts.filter(w => !votedWorkoutIds.has(w.id));
+
+                setSquadBadge(pendingVotes.length);
+            } else {
+                setSquadBadge(0);
+            }
+        } catch (error) {
+            console.error('Error fetching badge counts:', error);
+        }
+    };
+
+    useFocusEffect(
+        React.useCallback(() => {
+            fetchBadgeCounts();
+        }, [])
+    );
+
     return (
         <Tab.Navigator
             screenOptions={({ route }) => ({
                 headerShown: false,
                 tabBarStyle: styles.tabBar,
                 tabBarShowLabel: false,
-                tabBarIcon: ({ focused }) => (
-                    <TabIcon name={route.name} focused={focused} />
-                ),
+                tabBarIcon: ({ focused }) => {
+                    let badge: number | undefined;
+
+                    if (route.name === 'Challenges') {
+                        badge = challengesBadge;
+                    } else if (route.name === 'Squad') {
+                        badge = squadBadge;
+                    }
+
+                    return (
+                        <TabIcon name={route.name} focused={focused} badge={badge} />
+                    );
+                },
             })}
         >
             <Tab.Screen name="Home" component={HomeScreen} />
@@ -261,6 +343,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         width: 70,
     },
+    tabIconContainer: {
+        position: 'relative',
+        alignItems: 'center',
+    },
     tabEmoji: {
         fontSize: 24,
         marginBottom: 4,
@@ -268,6 +354,23 @@ const styles = StyleSheet.create({
     },
     tabEmojiActive: {
         opacity: 1,
+    },
+    badge: {
+        position: 'absolute',
+        top: -4,
+        right: -8,
+        backgroundColor: colors.error,
+        borderRadius: 10,
+        minWidth: 20,
+        height: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 4,
+    },
+    badgeText: {
+        color: colors.textPrimary,
+        fontSize: 10,
+        fontWeight: '700',
     },
     tabLabel: {
         ...typography.labelSmall,

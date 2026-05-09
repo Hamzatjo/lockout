@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, typography, spacing, borderRadius } from '../theme';
 import { supabase } from '../lib/supabase';
+import { StreakBadge } from '../components/StreakBadge';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 type LeaderboardEntry = {
@@ -22,6 +23,7 @@ type LeaderboardEntry = {
     check_in_days: number;
     tribunal_wins: number;
     pr_claims: number;
+    current_streak: number;
 };
 
 type TimeFilter = 'week' | 'season' | 'all';
@@ -82,7 +84,7 @@ export default function LeaderboardScreen({ navigation }: Props) {
 
             const { data: workouts } = await supabase
                 .from('workouts')
-                .select('user_id, points, verification_level, created_at, profiles(username, avatar_url)')
+                .select('user_id, points, verification_level, created_at, profiles(username, avatar_url, current_streak)')
                 .eq('squad_id', membership.squad_id)
                 .gte('created_at', start)
                 .lte('created_at', end)
@@ -102,6 +104,7 @@ export default function LeaderboardScreen({ navigation }: Props) {
                         user_id: userId,
                         username: workout.profiles?.username || 'Unknown',
                         avatar_url: workout.profiles?.avatar_url || null,
+                        current_streak: workout.profiles?.current_streak || 0,
                         total_points: 0,
                         check_in_days: 0,
                         tribunal_wins: 0,
@@ -175,9 +178,12 @@ export default function LeaderboardScreen({ navigation }: Props) {
                 </View>
 
                 <View style={styles.entryInfo}>
-                    <Text style={[styles.entryName, isCurrentUser && styles.currentUserName]}>
-                        {item.username} {isCurrentUser && '(You)'}
-                    </Text>
+                    <View style={styles.nameRow}>
+                        <Text style={[styles.entryName, isCurrentUser && styles.currentUserName]}>
+                            {item.username} {isCurrentUser && '(You)'}
+                        </Text>
+                        <StreakBadge streak={item.current_streak} mode="compact" />
+                    </View>
                     <View style={styles.statsRow}>
                         <Text style={styles.statItem}>📅 {item.check_in_days} days</Text>
                         <Text style={styles.statItem}>⚖️ {item.tribunal_wins}</Text>
@@ -405,10 +411,17 @@ const styles = StyleSheet.create({
         flex: 1,
         marginLeft: spacing.md,
     },
+    nameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: spacing.xs,
+    },
     entryName: {
         ...typography.bodyLarge,
         color: colors.textPrimary,
         fontWeight: '600',
+        flex: 1,
     },
     currentUserName: {
         color: colors.primary,

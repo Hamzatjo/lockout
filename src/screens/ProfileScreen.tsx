@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, typography, spacing, borderRadius } from '../theme';
 import { supabase } from '../lib/supabase';
+import { StreakBadge } from '../components/StreakBadge';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 type Props = {
@@ -22,6 +23,9 @@ type Props = {
 export default function ProfileScreen({ navigation }: Props) {
     const [username, setUsername] = useState<string | null>(null);
     const [email, setEmail] = useState<string | null>(null);
+    const [currentStreak, setCurrentStreak] = useState<number>(0);
+    const [totalWorkouts, setTotalWorkouts] = useState<number>(0);
+    const [memberSince, setMemberSince] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
@@ -35,13 +39,23 @@ export default function ProfileScreen({ navigation }: Props) {
 
             const { data: profile } = await supabase
                 .from('profiles')
-                .select('username')
+                .select('username, current_streak, created_at')
                 .eq('id', user.id)
                 .single();
 
             if (profile) {
                 setUsername(profile.username);
+                setCurrentStreak(profile.current_streak || 0);
+                setMemberSince(profile.created_at);
             }
+
+            // Get total workouts count
+            const { count } = await supabase
+                .from('workouts')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', user.id);
+
+            setTotalWorkouts(count || 0);
         }
     };
 
@@ -144,6 +158,52 @@ export default function ProfileScreen({ navigation }: Props) {
                     </View>
                     <Text style={styles.username}>@{username || 'User'}</Text>
                     <Text style={styles.email}>{email}</Text>
+
+                    {/* Streak Display */}
+                    <View style={styles.streakContainer}>
+                        <StreakBadge streak={currentStreak} mode="full" />
+                    </View>
+
+                    {/* Stats Row */}
+                    <View style={styles.statsRow}>
+                        <View style={styles.statItem}>
+                            <Text style={styles.statNumber}>{totalWorkouts}</Text>
+                            <Text style={styles.statLabel}>Workouts</Text>
+                        </View>
+                        <View style={styles.statDivider} />
+                        <View style={styles.statItem}>
+                            <Text style={styles.statNumber}>
+                                {memberSince ? new Date(memberSince).toLocaleDateString('en-US', {
+                                    month: 'short',
+                                    year: 'numeric'
+                                }) : 'N/A'}
+                            </Text>
+                            <Text style={styles.statLabel}>Member Since</Text>
+                        </View>
+                    </View>
+                </View>
+
+                {/* Quick Actions */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>QUICK ACTIONS</Text>
+
+                    <TouchableOpacity
+                        style={styles.menuItem}
+                        onPress={() => navigation.navigate('StatsOverview')}
+                    >
+                        <Text style={styles.menuIcon}>📊</Text>
+                        <Text style={styles.menuText}>View Stats</Text>
+                        <Text style={styles.menuArrow}>→</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={styles.menuItem}
+                        onPress={() => navigation.navigate('Settings')}
+                    >
+                        <Text style={styles.menuIcon}>⚙️</Text>
+                        <Text style={styles.menuText}>Settings</Text>
+                        <Text style={styles.menuArrow}>→</Text>
+                    </TouchableOpacity>
                 </View>
 
                 {/* Settings */}
@@ -262,6 +322,36 @@ const styles = StyleSheet.create({
         ...typography.bodyMedium,
         color: colors.textMuted,
         marginTop: spacing.xs,
+    },
+    streakContainer: {
+        marginTop: spacing.lg,
+        marginBottom: spacing.md,
+    },
+    statsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: spacing.lg,
+        paddingHorizontal: spacing.lg,
+    },
+    statItem: {
+        flex: 1,
+        alignItems: 'center',
+    },
+    statNumber: {
+        ...typography.headlineMedium,
+        color: colors.primary,
+        fontWeight: '700',
+    },
+    statLabel: {
+        ...typography.labelSmall,
+        color: colors.textMuted,
+        marginTop: spacing.xs,
+    },
+    statDivider: {
+        width: 1,
+        height: 40,
+        backgroundColor: colors.border,
+        marginHorizontal: spacing.lg,
     },
     sectionTitle: {
         ...typography.labelSmall,

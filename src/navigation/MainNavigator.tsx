@@ -27,6 +27,9 @@ import WelcomeScreen from '../screens/onboarding/WelcomeScreen';
 import SquadChoiceScreen from '../screens/onboarding/SquadChoiceScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import ChallengesScreen from '../screens/ChallengesScreen';
+import WorkoutHistoryScreen from '../screens/WorkoutHistoryScreen';
+import ExerciseProgressScreen from '../screens/ExerciseProgressScreen';
+import WeeklySummaryScreen from '../screens/WeeklySummaryScreen';
 import { Exercise } from '../data/exercises';
 
 export type MainStackParamList = {
@@ -46,6 +49,9 @@ export type MainStackParamList = {
     CreateEvent: { date: Date };
     EditWorkout: { workout?: any } | undefined;
     ActiveWorkout: { workout?: any; scheduleEventId?: string } | undefined;
+    WorkoutHistory: undefined;
+    ExerciseProgress: { exercise?: Exercise } | undefined;
+    WeeklySummary: undefined;
 };
 
 export type TabParamList = {
@@ -319,6 +325,21 @@ export default function MainNavigator() {
                 name="ActiveWorkout"
                 component={ActiveWorkoutScreen}
                 options={{ animation: 'slide_from_bottom', gestureEnabled: false }}
+            />
+            <Stack.Screen
+                name="WorkoutHistory"
+                component={WorkoutHistoryScreen}
+                options={{ animation: 'slide_from_right' }}
+            />
+            <Stack.Screen
+                name="ExerciseProgress"
+                component={ExerciseProgressScreen}
+                options={{ animation: 'slide_from_right' }}
+            />
+            <Stack.Screen
+                name="WeeklySummary"
+                component={WeeklySummaryScreen}
+                options={{ animation: 'slide_from_right' }}
             />
         </Stack.Navigator>
     );

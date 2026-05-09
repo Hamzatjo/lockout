@@ -22,6 +22,16 @@ type Workout = Database['public']['Tables']['workouts']['Row'] & {
     profiles: { username: string; avatar_url: string | null } | null;
 };
 
+type Reaction = Database['public']['Tables']['reactions']['Row'] & {
+    profiles: { username: string } | null;
+};
+
+type WorkoutWithReactions = Workout & {
+    reactions: Reaction[];
+    reactionCounts: Record<string, number>;
+    userReactions: Set<string>;
+};
+
 const VIEWABILITY_CONFIG = {
     itemVisiblePercentThreshold: 50,
     minimumViewTime: 300,
@@ -60,7 +70,7 @@ type Props = {
 };
 
 export default function HomeScreen({ navigation }: Props) {
-    const [workouts, setWorkouts] = useState<Workout[]>([]);
+    const [workouts, setWorkouts] = useState<WorkoutWithReactions[]>([]);
     const [refreshing, setRefreshing] = useState(false);
     const [squadName, setSquadName] = useState<string | null>(null);
     const [currentStreak, setCurrentStreak] = useState<number>(0);
@@ -71,11 +81,14 @@ export default function HomeScreen({ navigation }: Props) {
         username?: string;
     } | null>(null);
     const [visibleVideoIds, setVisibleVideoIds] = useState<Set<string>>(new Set());
+    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
     const fetchFeed = async () => {
         // Get user's squad
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
+
+        setCurrentUserId(user.id);
 
         // Get user's current streak
         const { data: profile } = await supabase
@@ -100,15 +113,45 @@ export default function HomeScreen({ navigation }: Props) {
 
         // Get recent workouts from squad
         if (membership?.squad_id) {
-            const { data } = await supabase
+            const { data: workoutData } = await supabase
                 .from('workouts')
                 .select('*, profiles(username, avatar_url)')
                 .eq('squad_id', membership.squad_id)
                 .order('created_at', { ascending: false })
                 .limit(20);
 
-            if (data) {
-                setWorkouts(data as Workout[]);
+            if (workoutData) {
+                // Fetch reactions for all workouts
+                const workoutIds = workoutData.map(w => w.id);
+                const { data: reactionsData } = await supabase
+                    .from('reactions')
+                    .select('*, profiles(username)')
+                    .in('workout_id', workoutIds);
+
+                // Process workouts with reactions
+                const workoutsWithReactions: WorkoutWithReactions[] = workoutData.map(workout => {
+                    const workoutReactions = reactionsData?.filter(r => r.workout_id === workout.id) || [];
+
+                    // Count reactions by emoji
+                    const reactionCounts: Record<string, number> = {};
+                    const userReactions = new Set<string>();
+
+                    workoutReactions.forEach(reaction => {
+                        reactionCounts[reaction.emoji] = (reactionCounts[reaction.emoji] || 0) + 1;
+                        if (reaction.user_id === user.id) {
+                            userReactions.add(reaction.emoji);
+                        }
+                    });
+
+                    return {
+                        ...workout,
+                        reactions: workoutReactions,
+                        reactionCounts,
+                        userReactions,
+                    };
+                });
+
+                setWorkouts(workoutsWithReactions);
             }
         }
     };
@@ -141,6 +184,104 @@ export default function HomeScreen({ navigation }: Props) {
         }
     };
 
+    const toggleReaction = async (workoutId: string, emoji: '👍' | '🔥' | '💪') => {
+        if (!currentUserId) return;
+
+        try {
+            const workout = workouts.find(w => w.id === workoutId);
+            if (!workout) return;
+
+            const hasReaction = workout.userReactions.has(emoji);
+
+            if (hasReaction) {
+                // Remove reaction
+                const { error } = await supabase
+                    .from('reactions')
+                    .delete()
+                    .eq('workout_id', workoutId)
+                    .eq('user_id', currentUserId)
+                    .eq('emoji', emoji);
+
+                if (error) throw error;
+            } else {
+                // Add reaction
+                const { error } = await supabase
+                    .from('reactions')
+                    .insert({
+                        workout_id: workoutId,
+                        user_id: currentUserId,
+                        emoji: emoji,
+                    });
+
+                if (error) throw error;
+            }
+
+            // Update local state
+            setWorkouts(prevWorkouts =>
+                prevWorkouts.map(w => {
+                    if (w.id === workoutId) {
+                        const newUserReactions = new Set(w.userReactions);
+                        const newReactionCounts = { ...w.reactionCounts };
+
+                        if (hasReaction) {
+                            newUserReactions.delete(emoji);
+                            newReactionCounts[emoji] = Math.max(0, (newReactionCounts[emoji] || 0) - 1);
+                            if (newReactionCounts[emoji] === 0) {
+                                delete newReactionCounts[emoji];
+                            }
+                        } else {
+                            newUserReactions.add(emoji);
+                            newReactionCounts[emoji] = (newReactionCounts[emoji] || 0) + 1;
+                        }
+
+                        return {
+                            ...w,
+                            userReactions: newUserReactions,
+                            reactionCounts: newReactionCounts,
+                        };
+                    }
+                    return w;
+                })
+            );
+        } catch (error) {
+            console.error('Error toggling reaction:', error);
+        }
+    };
+
+    const renderReactionBar = (workout: WorkoutWithReactions) => {
+        const emojis: ('👍' | '🔥' | '💪')[] = ['👍', '🔥', '💪'];
+
+        return (
+            <View style={styles.reactionBar}>
+                {emojis.map(emoji => {
+                    const count = workout.reactionCounts[emoji] || 0;
+                    const hasReacted = workout.userReactions.has(emoji);
+
+                    return (
+                        <TouchableOpacity
+                            key={emoji}
+                            style={[
+                                styles.reactionButton,
+                                hasReacted && styles.reactionButtonActive
+                            ]}
+                            onPress={() => toggleReaction(workout.id, emoji)}
+                        >
+                            <Text style={styles.reactionEmoji}>{emoji}</Text>
+                            {count > 0 && (
+                                <Text style={[
+                                    styles.reactionCount,
+                                    hasReacted && styles.reactionCountActive
+                                ]}>
+                                    {count}
+                                </Text>
+                            )}
+                        </TouchableOpacity>
+                    );
+                })}
+            </View>
+        );
+    };
+
     const onViewableItemsChanged = useCallback(
         ({ changed }: { changed: ViewToken[] }) => {
             setVisibleVideoIds(prevSet => {
@@ -158,66 +299,70 @@ export default function HomeScreen({ navigation }: Props) {
         []
     );
 
-    const renderWorkoutCard = ({ item }: { item: Workout }) => {
+    const renderWorkoutCard = ({ item }: { item: WorkoutWithReactions }) => {
         const isCheckIn = item.verification_level === 'check_in';
         const isTribunal = item.verification_level === 'tribunal';
         const isVideo = isVideoMedia(item);
         const isVisible = visibleVideoIds.has(item.id);
 
         return (
-            <TouchableOpacity
-                style={styles.card}
-                onPress={() => openMedia(item)}
-                activeOpacity={0.9}
-            >
-                <View style={styles.cardHeader}>
-                    <View style={styles.avatar}>
-                        {item.profiles?.avatar_url ? (
-                            <Image source={{ uri: item.profiles.avatar_url }} style={styles.avatarImage} />
-                        ) : (
-                            <Text style={styles.avatarText}>
-                                {item.profiles?.username?.[0]?.toUpperCase() || '?'}
+            <View style={styles.card}>
+                <TouchableOpacity
+                    onPress={() => openMedia(item)}
+                    activeOpacity={0.9}
+                >
+                    <View style={styles.cardHeader}>
+                        <View style={styles.avatar}>
+                            {item.profiles?.avatar_url ? (
+                                <Image source={{ uri: item.profiles.avatar_url }} style={styles.avatarImage} />
+                            ) : (
+                                <Text style={styles.avatarText}>
+                                    {item.profiles?.username?.[0]?.toUpperCase() || '?'}
+                                </Text>
+                            )}
+                        </View>
+                        <View style={styles.cardHeaderText}>
+                            <Text style={styles.username}>{item.profiles?.username || 'Unknown'}</Text>
+                            <Text style={styles.timestamp}>
+                                {new Date(item.created_at).toLocaleDateString()}
                             </Text>
-                        )}
+                        </View>
+                        <View style={[
+                            styles.badge,
+                            isCheckIn ? styles.badgeCheckIn : styles.badgeTribunal
+                        ]}>
+                            <Text style={styles.badgeText}>
+                                {isCheckIn ? '📍' : '⚖️'} {isCheckIn ? 'CHECK IN' : 'TRIBUNAL'}
+                            </Text>
+                        </View>
                     </View>
-                    <View style={styles.cardHeaderText}>
-                        <Text style={styles.username}>{item.profiles?.username || 'Unknown'}</Text>
-                        <Text style={styles.timestamp}>
-                            {new Date(item.created_at).toLocaleDateString()}
-                        </Text>
-                    </View>
-                    <View style={[
-                        styles.badge,
-                        isCheckIn ? styles.badgeCheckIn : styles.badgeTribunal
-                    ]}>
-                        <Text style={styles.badgeText}>
-                            {isCheckIn ? '📍' : '⚖️'} {isCheckIn ? 'CHECK IN' : 'TRIBUNAL'}
-                        </Text>
-                    </View>
-                </View>
 
-                {item.thumbnail_url && (
-                    <View style={styles.mediaContainer}>
-                        {isVideo ? (
-                            <VideoThumbnail uri={item.media_url || item.thumbnail_url} isVisible={isVisible} />
-                        ) : (
-                            <Image source={{ uri: item.thumbnail_url }} style={styles.cardImage} />
-                        )}
-                    </View>
-                )}
+                    {item.thumbnail_url && (
+                        <View style={styles.mediaContainer}>
+                            {isVideo ? (
+                                <VideoThumbnail uri={item.media_url || item.thumbnail_url} isVisible={isVisible} />
+                            ) : (
+                                <Image source={{ uri: item.thumbnail_url }} style={styles.cardImage} />
+                            )}
+                        </View>
+                    )}
 
-                {item.caption && (
-                    <Text style={styles.caption}>{item.caption}</Text>
-                )}
+                    {item.caption && (
+                        <Text style={styles.caption}>{item.caption}</Text>
+                    )}
 
-                {isTribunal && (
-                    <View style={styles.pointsBadge}>
-                        <Text style={styles.pointsText}>
-                            {item.points > 0 ? `+${item.points} pts` : 'PENDING'}
-                        </Text>
-                    </View>
-                )}
-            </TouchableOpacity>
+                    {isTribunal && (
+                        <View style={styles.pointsBadge}>
+                            <Text style={styles.pointsText}>
+                                {item.points > 0 ? `+${item.points} pts` : 'PENDING'}
+                            </Text>
+                        </View>
+                    )}
+                </TouchableOpacity>
+
+                {/* Reaction Bar */}
+                {renderReactionBar(item)}
+            </View>
         );
     };
 
@@ -478,5 +623,36 @@ const styles = StyleSheet.create({
         ...typography.bodyMedium,
         color: colors.textMuted,
         textAlign: 'center',
+    },
+    reactionBar: {
+        flexDirection: 'row',
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+        gap: spacing.sm,
+    },
+    reactionButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: spacing.sm,
+        paddingVertical: spacing.xs,
+        borderRadius: borderRadius.sm,
+        backgroundColor: colors.surfaceLight,
+        gap: spacing.xs,
+    },
+    reactionButtonActive: {
+        backgroundColor: colors.primary + '20',
+    },
+    reactionEmoji: {
+        fontSize: 16,
+    },
+    reactionCount: {
+        ...typography.labelSmall,
+        color: colors.textMuted,
+        fontWeight: '600',
+    },
+    reactionCountActive: {
+        color: colors.primary,
     },
 });

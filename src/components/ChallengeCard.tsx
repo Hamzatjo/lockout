@@ -1,7 +1,7 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { colors, typography } from '../theme';
-import { Database } from '../lib/supabase';
+import { Database, supabase } from '../lib/supabase';
 
 type Challenge = Database['public']['Tables']['challenges']['Row'];
 type ChallengeParticipant = Database['public']['Tables']['challenge_participants']['Row'];
@@ -10,13 +10,48 @@ interface ChallengeCardProps {
   challenge: Challenge;
   userParticipation?: ChallengeParticipant;
   isCompleted?: boolean;
+  onParticipationChange?: () => void;
 }
 
 export default function ChallengeCard({
   challenge,
   userParticipation,
-  isCompleted = false
+  isCompleted = false,
+  onParticipationChange
 }: ChallengeCardProps) {
+  const [timeLeft, setTimeLeft] = useState<string>('');
+  const [joining, setJoining] = useState(false);
+
+  useEffect(() => {
+    const updateCountdown = () => {
+      const now = new Date();
+      const endDate = new Date(challenge.ends_at);
+      const timeDiff = endDate.getTime() - now.getTime();
+
+      if (timeDiff <= 0) {
+        setTimeLeft('Expired');
+        return;
+      }
+
+      const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+
+      if (days > 0) {
+        setTimeLeft(`${days}d ${hours}h left`);
+      } else if (hours > 0) {
+        setTimeLeft(`${hours}h ${minutes}m left`);
+      } else {
+        setTimeLeft(`${minutes}m left`);
+      }
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 60000); // Update every minute
+
+    return () => clearInterval(interval);
+  }, [challenge.ends_at]);
+
   const getProgressPercentage = () => {
     if (challenge.challenge_type === 'individual') {
       const progress = userParticipation?.progress || 0;
@@ -42,17 +77,51 @@ export default function ChallengeCard({
   };
 
   const getStatusText = () => {
-    if (isCompleted) return 'Completed';
+    if (isCompleted) return 'Completed ✅';
     if (new Date(challenge.ends_at) < new Date()) return 'Expired';
     if (new Date(challenge.starts_at) > new Date()) return 'Upcoming';
     return 'Active';
   };
 
+  const joinChallenge = async () => {
+    try {
+      setJoining(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from('challenge_participants')
+        .insert({
+          challenge_id: challenge.id,
+          user_id: user.id,
+          progress: 0,
+        });
+
+      if (error) throw error;
+
+      onParticipationChange?.();
+    } catch (error) {
+      console.error('Error joining challenge:', error);
+      Alert.alert('Error', 'Failed to join challenge. Please try again.');
+    } finally {
+      setJoining(false);
+    }
+  };
+
   const progressPercentage = getProgressPercentage();
   const statusColor = getStatusColor();
+  const isActive = new Date(challenge.starts_at) <= new Date() && new Date(challenge.ends_at) > new Date();
+  const canJoin = challenge.challenge_type === 'individual' && !userParticipation && isActive && !isCompleted;
 
   return (
     <View style={[styles.container, isCompleted && styles.completedContainer]}>
+      {/* Completed Badge */}
+      {isCompleted && (
+        <View style={styles.completedBadge}>
+          <Text style={styles.completedBadgeText}>🎉 COMPLETED! 🎉</Text>
+        </View>
+      )}
+
       <View style={styles.header}>
         <View style={styles.titleRow}>
           <Text style={styles.title}>{challenge.title}</Text>
@@ -88,6 +157,27 @@ export default function ChallengeCard({
           <Text style={styles.progressPercentage}>{Math.round(progressPercentage)}%</Text>
         </View>
       </View>
+
+      {/* Countdown Timer */}
+      {isActive && !isCompleted && (
+        <View style={styles.countdownContainer}>
+          <Text style={styles.countdownIcon}>⏰</Text>
+          <Text style={styles.countdownText}>{timeLeft}</Text>
+        </View>
+      )}
+
+      {/* Join Challenge Button */}
+      {canJoin && (
+        <TouchableOpacity
+          style={styles.joinButton}
+          onPress={joinChallenge}
+          disabled={joining}
+        >
+          <Text style={styles.joinButtonText}>
+            {joining ? 'Joining...' : '🚀 Join Challenge'}
+          </Text>
+        </TouchableOpacity>
+      )}
 
       <View style={styles.footer}>
         <Text style={styles.reward}>🏆 {challenge.point_reward} pts</Text>
@@ -192,5 +282,55 @@ const styles = StyleSheet.create({
   timeframe: {
     ...typography.bodySmall,
     color: colors.textMuted,
+  },
+  completedBadge: {
+    position: 'absolute',
+    top: -8,
+    left: 16,
+    right: 16,
+    backgroundColor: colors.success,
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    zIndex: 1,
+    alignItems: 'center',
+  },
+  completedBadgeText: {
+    ...typography.labelSmall,
+    color: colors.background,
+    fontWeight: '700',
+    fontSize: 10,
+  },
+  countdownContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.warning + '20',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+    gap: 6,
+  },
+  countdownIcon: {
+    fontSize: 14,
+  },
+  countdownText: {
+    ...typography.labelMedium,
+    color: colors.warning,
+    fontWeight: '600',
+  },
+  joinButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  joinButtonText: {
+    ...typography.labelMedium,
+    color: colors.background,
+    fontWeight: '600',
   },
 });

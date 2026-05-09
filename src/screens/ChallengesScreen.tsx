@@ -184,6 +184,7 @@ export default function ChallengesScreen({ navigation }: ChallengesScreenProps) 
                 challenge={challenge}
                 userParticipation={challenge.userParticipation}
                 isCompleted={challenge.isCompleted}
+                onParticipationChange={fetchChallenges}
               />
             ))}
           </View>

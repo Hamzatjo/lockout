@@ -202,7 +202,12 @@ export default function PRLeaderboardScreen({ navigation, route }: Props) {
                     <Text style={styles.backButton}>← Back</Text>
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>PR LEADERBOARD</Text>
-                <View style={styles.placeholder} />
+                <TouchableOpacity
+                    onPress={() => navigation.navigate('ExerciseProgress', { exercise })}
+                    style={styles.progressButton}
+                >
+                    <Text style={styles.progressButtonText}>📈</Text>
+                </TouchableOpacity>
             </View>
 
             <View style={styles.exerciseHeader}>
@@ -280,6 +285,12 @@ const styles = StyleSheet.create({
     },
     placeholder: {
         width: 50,
+    },
+    progressButton: {
+        padding: spacing.sm,
+    },
+    progressButtonText: {
+        fontSize: 20,
     },
     exerciseHeader: {
         alignItems: 'center',

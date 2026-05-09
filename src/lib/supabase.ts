@@ -254,6 +254,28 @@ export type Database = {
                 Insert: Omit<Database['public']['Tables']['challenge_participants']['Row'], 'id' | 'created_at'>;
                 Update: Partial<Database['public']['Tables']['challenge_participants']['Insert']>;
             };
+            reactions: {
+                Row: {
+                    id: string;
+                    workout_id: string;
+                    user_id: string;
+                    emoji: '👍' | '🔥' | '💪';
+                    created_at: string;
+                };
+                Insert: Omit<Database['public']['Tables']['reactions']['Row'], 'id' | 'created_at'>;
+                Update: Partial<Database['public']['Tables']['reactions']['Insert']>;
+            };
+            comments: {
+                Row: {
+                    id: string;
+                    workout_id: string;
+                    user_id: string;
+                    text: string;
+                    created_at: string;
+                };
+                Insert: Omit<Database['public']['Tables']['comments']['Row'], 'id' | 'created_at'>;
+                Update: Partial<Database['public']['Tables']['comments']['Insert']>;
+            };
         };
     };
 };

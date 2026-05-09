@@ -189,6 +189,15 @@ export default function ProfileScreen({ navigation }: Props) {
 
                     <TouchableOpacity
                         style={styles.menuItem}
+                        onPress={() => navigation.navigate('WorkoutHistory')}
+                    >
+                        <Text style={styles.menuIcon}>📅</Text>
+                        <Text style={styles.menuText}>Workout History</Text>
+                        <Text style={styles.menuArrow}>→</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={styles.menuItem}
                         onPress={() => navigation.navigate('StatsOverview')}
                     >
                         <Text style={styles.menuIcon}>📊</Text>
